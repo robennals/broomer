@@ -1,33 +1,65 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
 import Terminal from './components/Terminal'
 import FilePanel from './components/FilePanel'
+import { useSessionStore, type Session, type SessionStatus } from './store/sessions'
 
-export type SessionStatus = 'working' | 'waiting' | 'idle' | 'error'
-
-export interface Session {
-  id: string
-  name: string
-  directory: string
-  branch: string
-  status: SessionStatus
-}
-
-// Demo sessions for initial UI - use /tmp which exists on all systems
-const demoSessions: Session[] = [
-  { id: '1', name: 'agent-manager', directory: '/tmp', branch: 'main', status: 'working' },
-  { id: '2', name: 'backend-api', directory: '/tmp', branch: 'feature/auth', status: 'waiting' },
-  { id: '3', name: 'docs-site', directory: '/tmp', branch: 'main', status: 'idle' },
-]
+// Re-export types for backwards compatibility
+export type { Session, SessionStatus }
 
 function App() {
-  const [sessions] = useState<Session[]>(demoSessions)
-  const [activeSessionId, setActiveSessionId] = useState<string | null>('1')
-  const [showFilePanel, setShowFilePanel] = useState(false)
-  const [showUserTerminal, setShowUserTerminal] = useState(false)
+  const {
+    sessions,
+    activeSessionId,
+    isLoading,
+    loadSessions,
+    addSession,
+    removeSession,
+    setActiveSession,
+    refreshAllBranches,
+  } = useSessionStore()
+
+  const [showFilePanel, setShowFilePanel] = React.useState(false)
+  const [showUserTerminal, setShowUserTerminal] = React.useState(false)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
+
+  // Load sessions on mount
+  useEffect(() => {
+    loadSessions()
+  }, [loadSessions])
+
+  // Poll for branch changes every 2 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (sessions.length > 0) {
+        refreshAllBranches()
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [sessions.length, refreshAllBranches])
+
+  const handleNewSession = async () => {
+    const folderPath = await window.dialog.openFolder()
+    if (folderPath) {
+      try {
+        await addSession(folderPath)
+      } catch (error) {
+        console.error('Failed to add session:', error)
+        // Could show an error toast here
+      }
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen bg-bg-primary flex items-center justify-center">
+        <div className="text-text-secondary">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <Layout
@@ -37,29 +69,51 @@ function App() {
         <SessionList
           sessions={sessions}
           activeSessionId={activeSessionId}
-          onSelectSession={setActiveSessionId}
-          onNewSession={() => console.log('New session')}
+          onSelectSession={setActiveSession}
+          onNewSession={handleNewSession}
+          onDeleteSession={removeSession}
         />
       }
       mainTerminal={
-        <Terminal
-          sessionId={activeSession?.id}
-          cwd={activeSession?.directory || process.cwd()}
-        />
+        <div className="h-full w-full relative">
+          {sessions.map((session) => (
+            <div
+              key={session.id}
+              className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
+            >
+              <Terminal sessionId={session.id} cwd={session.directory} />
+            </div>
+          ))}
+          {sessions.length === 0 && (
+            <div className="h-full w-full flex items-center justify-center text-text-secondary">
+              <div className="text-center">
+                <p>No sessions yet.</p>
+                <p className="text-sm mt-2">Click "+ New Session" to add a git repository.</p>
+              </div>
+            </div>
+          )}
+        </div>
       }
       filePanel={showFilePanel ? <FilePanel directory={activeSession?.directory} /> : null}
       userTerminal={
-        showUserTerminal ? (
-          <Terminal
-            sessionId={activeSession ? `user-${activeSession.id}` : undefined}
-            cwd={activeSession?.directory || process.cwd()}
-          />
-        ) : null
+        <div className="h-full w-full relative">
+          {sessions.map((session) => (
+            <div
+              key={`user-${session.id}`}
+              className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
+            >
+              <Terminal sessionId={`user-${session.id}`} cwd={session.directory} />
+            </div>
+          ))}
+        </div>
       }
       onToggleFilePanel={() => setShowFilePanel(!showFilePanel)}
       onToggleUserTerminal={() => setShowUserTerminal(!showUserTerminal)}
     />
   )
 }
+
+// Need to import React for useState
+import React from 'react'
 
 export default App

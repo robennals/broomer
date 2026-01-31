@@ -1,6 +1,9 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
+import { homedir } from 'os'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import * as pty from 'node-pty'
+import simpleGit from 'simple-git'
 
 // Check if we're in development mode
 const isDev = process.env.ELECTRON_RENDERER_URL !== undefined
@@ -117,6 +120,105 @@ ipcMain.handle('pty:kill', (_event, id: string) => {
     ptyProcess.kill()
     ptyProcesses.delete(id)
   }
+})
+
+// Config directory and file
+const CONFIG_DIR = join(homedir(), '.agent-manager')
+const CONFIG_FILE = join(CONFIG_DIR, 'config.json')
+
+// Demo sessions for E2E tests (each needs a unique directory for branch tracking)
+const E2E_DEMO_SESSIONS = [
+  { id: '1', name: 'agent-manager', directory: '/tmp/e2e-agent-manager' },
+  { id: '2', name: 'backend-api', directory: '/tmp/e2e-backend-api' },
+  { id: '3', name: 'docs-site', directory: '/tmp/e2e-docs-site' },
+]
+
+// Create E2E test directories if in E2E mode
+if (isE2ETest) {
+  for (const session of E2E_DEMO_SESSIONS) {
+    if (!existsSync(session.directory)) {
+      mkdirSync(session.directory, { recursive: true })
+    }
+  }
+}
+
+// Config IPC handlers
+ipcMain.handle('config:load', async () => {
+  // In E2E test mode, return demo sessions for consistent testing
+  if (isE2ETest) {
+    return { sessions: E2E_DEMO_SESSIONS }
+  }
+
+  try {
+    if (!existsSync(CONFIG_FILE)) {
+      return { sessions: [] }
+    }
+    const data = readFileSync(CONFIG_FILE, 'utf-8')
+    return JSON.parse(data)
+  } catch {
+    return { sessions: [] }
+  }
+})
+
+ipcMain.handle('config:save', async (_event, config: { sessions: unknown[] }) => {
+  try {
+    if (!existsSync(CONFIG_DIR)) {
+      mkdirSync(CONFIG_DIR, { recursive: true })
+    }
+    writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+// Mock branch data for E2E tests (keyed by directory)
+const E2E_MOCK_BRANCHES: Record<string, string> = {
+  '/tmp/e2e-agent-manager': 'main',
+  '/tmp/e2e-backend-api': 'feature/auth',
+  '/tmp/e2e-docs-site': 'main',
+}
+
+// Git IPC handlers
+ipcMain.handle('git:getBranch', async (_event, repoPath: string) => {
+  // In E2E test mode, return mock branch data
+  if (isE2ETest) {
+    return E2E_MOCK_BRANCHES[repoPath] || 'main'
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    const status = await git.status()
+    return status.current || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+})
+
+ipcMain.handle('git:isGitRepo', async (_event, dirPath: string) => {
+  // In E2E test mode, always return true for demo directories
+  if (isE2ETest) {
+    return true
+  }
+
+  try {
+    const git = simpleGit(dirPath)
+    return await git.checkIsRepo()
+  } catch {
+    return false
+  }
+})
+
+// Dialog IPC handlers
+ipcMain.handle('dialog:openFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openDirectory'],
+    title: 'Select a Git Repository',
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+  return result.filePaths[0]
 })
 
 // App lifecycle

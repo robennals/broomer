@@ -53,27 +53,25 @@ test.describe('Agent Manager App', () => {
   })
 
   test('should display demo sessions in the sidebar', async () => {
-    // Check for demo sessions
-    const agentManagerSession = page.locator('button:has-text("agent-manager")')
+    // Check for demo sessions (sessions are now divs, not buttons)
+    const agentManagerSession = page.locator('div:has-text("agent-manager")').first()
     await expect(agentManagerSession).toBeVisible()
 
-    const backendSession = page.locator('button:has-text("backend-api")')
+    const backendSession = page.locator('div:has-text("backend-api")').first()
     await expect(backendSession).toBeVisible()
 
-    const docsSession = page.locator('button:has-text("docs-site")')
+    const docsSession = page.locator('div:has-text("docs-site")').first()
     await expect(docsSession).toBeVisible()
   })
 
   test('should show status indicators for sessions', async () => {
-    // Look for status text in the sidebar
-    const workingStatus = page.locator('text=Working')
-    await expect(workingStatus).toBeVisible()
-
-    const waitingStatus = page.locator('text=Waiting')
-    await expect(waitingStatus).toBeVisible()
-
-    const idleStatus = page.locator('text=Idle')
+    // Sessions start as idle, so look for idle status indicators
+    const idleStatus = page.locator('text=Idle').first()
     await expect(idleStatus).toBeVisible()
+
+    // Look for status dot indicators
+    const statusDot = page.locator('.bg-status-idle').first()
+    await expect(statusDot).toBeVisible()
   })
 
   test('should show branch names for sessions', async () => {
@@ -122,8 +120,8 @@ test.describe('Agent Manager App', () => {
   })
 
   test('should switch between sessions', async () => {
-    // Click on backend-api session
-    const backendSession = page.locator('button:has-text("backend-api")')
+    // Click on backend-api session (session items are divs with cursor-pointer)
+    const backendSession = page.locator('.cursor-pointer:has-text("backend-api")')
     await backendSession.click()
     await page.waitForTimeout(300)
 
@@ -131,7 +129,7 @@ test.describe('Agent Manager App', () => {
     await expect(backendSession).toHaveClass(/bg-bg-tertiary/)
 
     // Click back to agent-manager session
-    const agentManagerSession = page.locator('button:has-text("agent-manager")')
+    const agentManagerSession = page.locator('.cursor-pointer:has-text("agent-manager")')
     await agentManagerSession.click()
     await page.waitForTimeout(300)
 
@@ -145,13 +143,14 @@ test.describe('Terminal Integration', () => {
     // Wait a bit for xterm to initialize
     await page.waitForTimeout(1000)
 
-    const terminal = page.locator('.xterm')
+    // Use first() since there are multiple terminals (main + user)
+    const terminal = page.locator('.xterm').first()
     await expect(terminal).toBeVisible()
   })
 
   test('should display xterm canvas', async () => {
     await page.waitForTimeout(500)
-    const xtermScreen = page.locator('.xterm-screen')
+    const xtermScreen = page.locator('.xterm-screen').first()
     await expect(xtermScreen).toBeVisible()
   })
 
@@ -159,7 +158,7 @@ test.describe('Terminal Integration', () => {
     // Wait for terminal to initialize
     await page.waitForTimeout(1500)
 
-    // Get terminal content
+    // Get terminal content from the first (main) terminal
     const terminalText = await page.evaluate(() => {
       const viewport = document.querySelector('.xterm-rows')
       return viewport?.textContent || ''
@@ -174,8 +173,8 @@ test.describe('Terminal Integration', () => {
   })
 
   test('should be able to focus and type in terminal', async () => {
-    // Focus on the terminal
-    const terminal = page.locator('.xterm-helper-textarea')
+    // Focus on the first (main) terminal
+    const terminal = page.locator('.xterm-helper-textarea').first()
     await terminal.focus()
 
     // Type a simple command
@@ -188,8 +187,8 @@ test.describe('Terminal Integration', () => {
   })
 
   test('should execute commands and show output', async () => {
-    // Focus on the terminal
-    const terminal = page.locator('.xterm-helper-textarea')
+    // Focus on the first (main) terminal
+    const terminal = page.locator('.xterm-helper-textarea').first()
     await terminal.focus()
 
     // Type a test command with unique marker
@@ -200,7 +199,7 @@ test.describe('Terminal Integration', () => {
     // Wait for command to execute
     await page.waitForTimeout(500)
 
-    // Get terminal content
+    // Get terminal content from the first terminal
     const terminalText = await page.evaluate(() => {
       const viewport = document.querySelector('.xterm-rows')
       return viewport?.textContent || ''
@@ -227,17 +226,9 @@ test.describe('Layout', () => {
   })
 
   test('should have status color indicators', async () => {
-    // Green for working
-    const greenIndicator = page.locator('.bg-status-working')
-    await expect(greenIndicator).toBeVisible()
-
-    // Yellow for waiting
-    const yellowIndicator = page.locator('.bg-status-waiting')
-    await expect(yellowIndicator).toBeVisible()
-
-    // Gray for idle
-    const grayIndicator = page.locator('.bg-status-idle')
-    await expect(grayIndicator).toBeVisible()
+    // All sessions start as idle, so check for idle indicators
+    const idleIndicator = page.locator('.bg-status-idle').first()
+    await expect(idleIndicator).toBeVisible()
   })
 })
 
@@ -287,8 +278,8 @@ test.describe('File Panel', () => {
     await filesButton.click()
     await page.waitForTimeout(300)
 
-    // The demo sessions use /tmp as directory
-    const directoryPath = page.locator('text=/tmp')
+    // The demo sessions use /tmp/e2e-* directories - use partial match
+    const directoryPath = page.locator('text=e2e-agent-manager')
     await expect(directoryPath).toBeVisible()
 
     // Close the panel
@@ -347,16 +338,47 @@ test.describe('Button States', () => {
   })
 })
 
+test.describe('Session Terminal Persistence', () => {
+  test('should preserve terminal state when switching sessions', async () => {
+    // Type something in the first session's terminal
+    const terminal = page.locator('.xterm-helper-textarea').first()
+    await terminal.focus()
+
+    const uniqueMarker = `session1_${Date.now()}`
+    await page.keyboard.type(`echo ${uniqueMarker}`)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(500)
+
+    // Switch to another session
+    const backendSession = page.locator('.cursor-pointer:has-text("backend-api")')
+    await backendSession.click()
+    await page.waitForTimeout(500)
+
+    // Switch back to the first session
+    const agentManagerSession = page.locator('.cursor-pointer:has-text("agent-manager")')
+    await agentManagerSession.click()
+    await page.waitForTimeout(500)
+
+    // Verify the marker is still in the terminal
+    const terminalText = await page.evaluate(() => {
+      const viewport = document.querySelector('.xterm-rows')
+      return viewport?.textContent || ''
+    })
+
+    expect(terminalText).toContain(uniqueMarker)
+  })
+})
+
 test.describe('E2E Shell Integration', () => {
   test('should display E2E test ready marker', async () => {
     // Wait for terminal to initialize and display content
     await page.waitForTimeout(1500)
 
     // The E2E shell should display the ready marker
-    const xtermViewport = page.locator('.xterm-screen')
+    const xtermViewport = page.locator('.xterm-screen').first()
     await expect(xtermViewport).toBeVisible()
 
-    // Get terminal content
+    // Get terminal content from the first (main) terminal
     const terminalText = await page.evaluate(() => {
       const viewport = document.querySelector('.xterm-rows')
       return viewport?.textContent || ''
@@ -367,8 +389,8 @@ test.describe('E2E Shell Integration', () => {
   })
 
   test('should execute echo commands correctly', async () => {
-    // Focus on the terminal
-    const terminal = page.locator('.xterm-helper-textarea')
+    // Focus on the first (main) terminal
+    const terminal = page.locator('.xterm-helper-textarea').first()
     await terminal.focus()
 
     // Type a test command

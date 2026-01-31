@@ -23,12 +23,14 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "node-pty": "^1.0.0",
+    "path-browserify": "^1.0.1",
     "simple-git": "^3.22.0",
     "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.1",
     "@types/node": "^20.10.0",
+    "@types/path-browserify": "^1.0.3",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",

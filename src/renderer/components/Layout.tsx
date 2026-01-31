@@ -4,7 +4,7 @@ interface LayoutProps {
   sidebar: ReactNode
   mainTerminal: ReactNode
   filePanel: ReactNode | null
-  userTerminal: ReactNode | null
+  userTerminal: ReactNode
   showFilePanel: boolean
   showUserTerminal: boolean
   onToggleFilePanel: () => void
@@ -82,12 +82,14 @@ export default function Layout({
             )}
           </div>
 
-          {/* User terminal (togglable) */}
-          {userTerminal && (
-            <div className="h-48 flex-shrink-0 border-t border-border bg-bg-primary">
-              {userTerminal}
-            </div>
-          )}
+          {/* User terminal (togglable) - always mounted to preserve state */}
+          <div
+            className={`h-48 flex-shrink-0 border-t border-border bg-bg-primary ${
+              showUserTerminal ? '' : 'hidden'
+            }`}
+          >
+            {userTerminal}
+          </div>
         </div>
       </div>
     </div>

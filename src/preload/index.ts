@@ -9,6 +9,26 @@ export type PtyApi = {
   onExit: (id: string, callback: (exitCode: number) => void) => () => void
 }
 
+export type DialogApi = {
+  openFolder: () => Promise<string | null>
+}
+
+export type GitApi = {
+  getBranch: (path: string) => Promise<string>
+  isGitRepo: (path: string) => Promise<boolean>
+}
+
+export type ConfigApi = {
+  load: () => Promise<{ sessions: SessionData[] }>
+  save: (config: { sessions: SessionData[] }) => Promise<{ success: boolean; error?: string }>
+}
+
+export type SessionData = {
+  id: string
+  name: string
+  directory: string
+}
+
 const ptyApi: PtyApi = {
   create: (options) => ipcRenderer.invoke('pty:create', options),
   write: (id, data) => ipcRenderer.invoke('pty:write', id, data),
@@ -26,10 +46,30 @@ const ptyApi: PtyApi = {
   },
 }
 
+const dialogApi: DialogApi = {
+  openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+}
+
+const gitApi: GitApi = {
+  getBranch: (path) => ipcRenderer.invoke('git:getBranch', path),
+  isGitRepo: (path) => ipcRenderer.invoke('git:isGitRepo', path),
+}
+
+const configApi: ConfigApi = {
+  load: () => ipcRenderer.invoke('config:load'),
+  save: (config) => ipcRenderer.invoke('config:save', config),
+}
+
 contextBridge.exposeInMainWorld('pty', ptyApi)
+contextBridge.exposeInMainWorld('dialog', dialogApi)
+contextBridge.exposeInMainWorld('git', gitApi)
+contextBridge.exposeInMainWorld('config', configApi)
 
 declare global {
   interface Window {
     pty: PtyApi
+    dialog: DialogApi
+    git: GitApi
+    config: ConfigApi
   }
 }
