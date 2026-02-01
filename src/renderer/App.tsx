@@ -3,42 +3,54 @@ import Layout from './components/Layout'
 import SessionList from './components/SessionList'
 import Terminal from './components/Terminal'
 import Explorer from './components/Explorer'
-import FileViewer, { type FileViewerPosition } from './components/FileViewer'
+import FileViewer from './components/FileViewer'
 import DiffPanel from './components/DiffPanel'
 import AgentSettings from './components/AgentSettings'
 import NewSessionDialog from './components/NewSessionDialog'
-import { useSessionStore, type Session, type SessionStatus } from './store/sessions'
+import { useSessionStore, type Session, type SessionStatus, type LayoutSizes } from './store/sessions'
 import { useAgentStore } from './store/agents'
 import { useErrorStore } from './store/errors'
 
 // Re-export types for backwards compatibility
 export type { Session, SessionStatus }
 
+// Default layout sizes for when there's no active session
+const DEFAULT_LAYOUT_SIZES: LayoutSizes = {
+  explorerWidth: 256,
+  fileViewerSize: 300,
+  userTerminalHeight: 192,
+  diffPanelWidth: 320,
+}
+
 function App() {
   const {
     sessions,
     activeSessionId,
     isLoading,
+    showSidebar,
+    sidebarWidth,
     loadSessions,
     addSession,
     removeSession,
     setActiveSession,
     refreshAllBranches,
+    toggleSidebar,
+    setSidebarWidth,
     toggleAgentTerminal,
     toggleUserTerminal,
     toggleExplorer,
     toggleFileViewer,
     toggleDiff,
     selectFile,
+    setFileViewerPosition,
+    updateLayoutSize,
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
   const { addError } = useErrorStore()
 
-  const [showSidebar, setShowSidebar] = React.useState(true)
   const [showSettings, setShowSettings] = React.useState(false)
   const [pendingFolderPath, setPendingFolderPath] = React.useState<string | null>(null)
-  const [fileViewerPosition, setFileViewerPosition] = React.useState<FileViewerPosition>('top')
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
 
@@ -62,7 +74,6 @@ function App() {
   const handleNewSession = async () => {
     const folderPath = await window.dialog.openFolder()
     if (folderPath) {
-      // Show agent selection dialog
       setPendingFolderPath(folderPath)
     }
   }
@@ -82,11 +93,22 @@ function App() {
     setPendingFolderPath(null)
   }
 
-  // Helper to get agent command for a session
   const getAgentCommand = (session: Session) => {
     if (!session.agentId) return undefined
     const agent = agents.find((a) => a.id === session.agentId)
     return agent?.command
+  }
+
+  const handleLayoutSizeChange = (key: keyof LayoutSizes, value: number) => {
+    if (activeSessionId) {
+      updateLayoutSize(activeSessionId, key, value)
+    }
+  }
+
+  const handleFileViewerPositionChange = (position: 'top' | 'left') => {
+    if (activeSessionId) {
+      setFileViewerPosition(activeSessionId, position)
+    }
   }
 
   if (isLoading) {
@@ -107,8 +129,11 @@ function App() {
         showUserTerminal={activeSession?.showUserTerminal ?? false}
         showDiff={activeSession?.showDiff ?? false}
         showSettings={showSettings}
-        fileViewerPosition={fileViewerPosition}
-        onFileViewerPositionChange={setFileViewerPosition}
+        fileViewerPosition={activeSession?.fileViewerPosition ?? 'top'}
+        sidebarWidth={sidebarWidth}
+        layoutSizes={activeSession?.layoutSizes ?? DEFAULT_LAYOUT_SIZES}
+        onSidebarWidthChange={setSidebarWidth}
+        onLayoutSizeChange={handleLayoutSizeChange}
         sidebar={
           <SessionList
             sessions={sessions}
@@ -167,8 +192,8 @@ function App() {
           activeSession?.showFileViewer ? (
             <FileViewer
               filePath={activeSession?.selectedFilePath ?? null}
-              position={fileViewerPosition}
-              onPositionChange={setFileViewerPosition}
+              position={activeSession?.fileViewerPosition ?? 'top'}
+              onPositionChange={handleFileViewerPositionChange}
               onClose={() => activeSessionId && toggleFileViewer(activeSessionId)}
             />
           ) : null
@@ -179,7 +204,7 @@ function App() {
           ) : null
         }
         settingsPanel={showSettings ? <AgentSettings onClose={() => setShowSettings(false)} /> : null}
-        onToggleSidebar={() => setShowSidebar(!showSidebar)}
+        onToggleSidebar={toggleSidebar}
         onToggleExplorer={() => activeSessionId && toggleExplorer(activeSessionId)}
         onToggleFileViewer={() => activeSessionId && toggleFileViewer(activeSessionId)}
         onToggleAgentTerminal={() => activeSessionId && toggleAgentTerminal(activeSessionId)}

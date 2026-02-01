@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState, useCallback, useRef } from 'react'
 import ErrorIndicator from './ErrorIndicator'
-import type { FileViewerPosition } from './FileViewer'
+import type { LayoutSizes, FileViewerPosition } from '../store/sessions'
 
 // Detect if we're on Mac for keyboard shortcut display
 const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -21,7 +21,10 @@ interface LayoutProps {
   showDiff: boolean
   showSettings: boolean
   fileViewerPosition: FileViewerPosition
-  onFileViewerPositionChange: (position: FileViewerPosition) => void
+  sidebarWidth: number
+  layoutSizes: LayoutSizes
+  onSidebarWidthChange: (width: number) => void
+  onLayoutSizeChange: (key: keyof LayoutSizes, value: number) => void
   onToggleSidebar: () => void
   onToggleExplorer: () => void
   onToggleFileViewer: () => void
@@ -36,6 +39,8 @@ const formatShortcut = (key: string) => {
   const modifier = isMac ? '⌘' : 'Ctrl+'
   return `${modifier}${key}`
 }
+
+type DividerType = 'sidebar' | 'explorer' | 'fileViewer' | 'userTerminal' | 'diff' | null
 
 export default function Layout({
   sidebar,
@@ -53,7 +58,10 @@ export default function Layout({
   showDiff,
   showSettings,
   fileViewerPosition,
-  onFileViewerPositionChange,
+  sidebarWidth,
+  layoutSizes,
+  onSidebarWidthChange,
+  onLayoutSizeChange,
   onToggleSidebar,
   onToggleExplorer,
   onToggleFileViewer,
@@ -62,39 +70,67 @@ export default function Layout({
   onToggleDiff,
   onToggleSettings,
 }: LayoutProps) {
-  // State for resizable file viewer / agent terminal divider
-  const [fileViewerSize, setFileViewerSize] = useState(300) // height when top, width when left
-  const [isDragging, setIsDragging] = useState(false)
+  const [draggingDivider, setDraggingDivider] = useState<DividerType>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const mainContentRef = useRef<HTMLDivElement>(null)
 
-  // Handle drag for resizing file viewer
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Handle drag for resizing panels
+  const handleMouseDown = useCallback((divider: DividerType) => (e: React.MouseEvent) => {
     e.preventDefault()
-    setIsDragging(true)
+    setDraggingDivider(divider)
   }, [])
 
   useEffect(() => {
-    if (!isDragging) return
+    if (!draggingDivider) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const containerRect = containerRef.current.getBoundingClientRect()
+      const mainRect = mainContentRef.current?.getBoundingClientRect()
+      const centerRect = containerRef.current?.getBoundingClientRect()
 
-      if (fileViewerPosition === 'top') {
-        const newHeight = e.clientY - containerRect.top
-        // Clamp between 100px and container height - 100px
-        const maxHeight = containerRect.height - 100
-        setFileViewerSize(Math.max(100, Math.min(newHeight, maxHeight)))
-      } else {
-        const newWidth = e.clientX - containerRect.left
-        // Clamp between 200px and container width - 200px
-        const maxWidth = containerRect.width - 200
-        setFileViewerSize(Math.max(200, Math.min(newWidth, maxWidth)))
+      switch (draggingDivider) {
+        case 'sidebar': {
+          if (!mainRect) return
+          const newWidth = e.clientX - mainRect.left
+          onSidebarWidthChange(Math.max(150, Math.min(newWidth, 400)))
+          break
+        }
+        case 'explorer': {
+          if (!mainRect) return
+          const offset = showSidebar ? sidebarWidth : 0
+          const newWidth = e.clientX - mainRect.left - offset
+          onLayoutSizeChange('explorerWidth', Math.max(150, Math.min(newWidth, 500)))
+          break
+        }
+        case 'fileViewer': {
+          if (!centerRect) return
+          if (fileViewerPosition === 'top') {
+            const newHeight = e.clientY - centerRect.top
+            const maxHeight = centerRect.height - 100
+            onLayoutSizeChange('fileViewerSize', Math.max(100, Math.min(newHeight, maxHeight)))
+          } else {
+            const newWidth = e.clientX - centerRect.left
+            const maxWidth = centerRect.width - 200
+            onLayoutSizeChange('fileViewerSize', Math.max(200, Math.min(newWidth, maxWidth)))
+          }
+          break
+        }
+        case 'userTerminal': {
+          if (!centerRect) return
+          const newHeight = centerRect.bottom - e.clientY
+          onLayoutSizeChange('userTerminalHeight', Math.max(100, Math.min(newHeight, 500)))
+          break
+        }
+        case 'diff': {
+          if (!mainRect) return
+          const newWidth = mainRect.right - e.clientX
+          onLayoutSizeChange('diffPanelWidth', Math.max(200, Math.min(newWidth, 600)))
+          break
+        }
       }
     }
 
     const handleMouseUp = () => {
-      setIsDragging(false)
+      setDraggingDivider(null)
     }
 
     document.addEventListener('mousemove', handleMouseMove)
@@ -104,15 +140,13 @@ export default function Layout({
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, fileViewerPosition])
+  }, [draggingDivider, fileViewerPosition, sidebarWidth, showSidebar, onSidebarWidthChange, onLayoutSizeChange])
 
   // Keyboard shortcuts - use capture phase to intercept before terminal gets them
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check for Cmd (Mac) or Ctrl (Windows/Linux)
       if (!(e.metaKey || e.ctrlKey)) return
 
-      // Ignore if typing in a regular input (but allow in terminal)
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
@@ -156,10 +190,32 @@ export default function Layout({
       }
     }
 
-    // Use capture phase to get events before terminal
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [onToggleSidebar, onToggleExplorer, onToggleFileViewer, onToggleAgentTerminal, onToggleUserTerminal, onToggleDiff, onToggleSettings])
+
+  // Divider component - wide hit area, thin visual line
+  const Divider = ({ type, direction }: { type: DividerType; direction: 'horizontal' | 'vertical' }) => (
+    <div
+      onMouseDown={handleMouseDown(type)}
+      className={`flex-shrink-0 group relative ${
+        direction === 'vertical'
+          ? 'w-0 cursor-col-resize'
+          : 'h-0 cursor-row-resize'
+      }`}
+    >
+      {/* Invisible wide hit area */}
+      <div className={`absolute ${
+        direction === 'vertical'
+          ? 'w-4 h-full -left-2 top-0'
+          : 'h-4 w-full -top-2 left-0'
+      }`} />
+      {/* Thin visible line */}
+      <div className={`absolute transition-colors ${
+        draggingDivider === type ? 'bg-accent' : 'bg-border group-hover:bg-accent/50'
+      } ${direction === 'vertical' ? 'w-px h-full left-0 top-0' : 'h-px w-full top-0 left-0'}`} />
+    </div>
+  )
 
   return (
     <div className="h-screen flex flex-col bg-bg-primary">
@@ -175,7 +231,6 @@ export default function Layout({
           className="flex items-center gap-2"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          {/* Buttons ordered left-to-right matching UI layout */}
           <button
             onClick={onToggleSidebar}
             className={`px-3 py-1 text-xs rounded transition-colors ${
@@ -271,12 +326,18 @@ export default function Layout({
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex min-h-0">
+      <div ref={mainContentRef} className="flex-1 flex min-h-0">
         {/* Sidebar */}
         {showSidebar && (
-          <div className="w-56 flex-shrink-0 border-r border-border bg-bg-secondary overflow-y-auto">
-            {sidebar}
-          </div>
+          <>
+            <div
+              className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
+              style={{ width: sidebarWidth }}
+            >
+              {sidebar}
+            </div>
+            <Divider type="sidebar" direction="vertical" />
+          </>
         )}
 
         {/* Center + Right panels */}
@@ -285,9 +346,15 @@ export default function Layout({
           <div className="flex-1 flex min-h-0">
             {/* Left side panels (Explorer) */}
             {explorer && (
-              <div className="w-64 flex-shrink-0 border-r border-border bg-bg-secondary overflow-y-auto">
-                {explorer}
-              </div>
+              <>
+                <div
+                  className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
+                  style={{ width: layoutSizes.explorerWidth }}
+                >
+                  {explorer}
+                </div>
+                <Divider type="explorer" direction="vertical" />
+              </>
             )}
 
             {/* Center: file viewer + terminals or settings */}
@@ -304,58 +371,57 @@ export default function Layout({
                     <div
                       className="flex-shrink-0 bg-bg-secondary min-h-0"
                       style={{
-                        width: showAgentTerminal ? fileViewerSize : undefined,
-                        flex: showAgentTerminal ? undefined : 1,
+                        width: (showAgentTerminal || showUserTerminal) ? layoutSizes.fileViewerSize : undefined,
+                        flex: (showAgentTerminal || showUserTerminal) ? undefined : 1,
                       }}
                     >
                       {fileViewer}
                     </div>
                   )}
 
-                  {/* Draggable divider (vertical) - large hit area, small visual */}
-                  {fileViewer && showAgentTerminal && (
-                    <div
-                      onMouseDown={handleMouseDown}
-                      className="w-4 flex-shrink-0 cursor-col-resize flex items-center justify-center group"
-                    >
-                      <div className={`w-0.5 h-full transition-colors ${
-                        isDragging ? 'bg-accent' : 'bg-border group-hover:bg-accent/50'
-                      }`} />
-                    </div>
+                  {/* Draggable divider (vertical) */}
+                  {fileViewer && (showAgentTerminal || showUserTerminal) && (
+                    <Divider type="fileViewer" direction="vertical" />
                   )}
 
                   {/* Terminals container - right side */}
-                  <div className="flex-1 flex flex-col min-w-0">
-                    {/* Agent terminal */}
-                    <div
-                      className={`flex-1 min-w-0 bg-bg-primary ${
-                        showAgentTerminal ? '' : 'hidden'
-                      }`}
-                    >
-                      {agentTerminal}
-                    </div>
-
-                    {/* User terminal */}
-                    <div
-                      className={`h-48 flex-shrink-0 border-t border-border bg-bg-primary ${
-                        showUserTerminal ? '' : 'hidden'
-                      }`}
-                    >
-                      {userTerminal}
-                    </div>
-
-                    {/* Show placeholder if no terminals visible */}
-                    {!showAgentTerminal && !showUserTerminal && !fileViewer && (
-                      <div className="flex-1 flex items-center justify-center bg-bg-primary text-text-secondary">
-                        <div className="text-center">
-                          <p>No panels visible</p>
-                          <p className="text-sm mt-2">
-                            Press {formatShortcut('4')} for Agent or {formatShortcut('5')} for Terminal
-                          </p>
+                  {(showAgentTerminal || showUserTerminal) && (
+                    <div className="flex-1 flex flex-col min-w-0">
+                      {/* Agent terminal */}
+                      {showAgentTerminal && (
+                        <div className="flex-1 min-w-0 bg-bg-primary">
+                          {agentTerminal}
                         </div>
+                      )}
+
+                      {/* User terminal divider */}
+                      {showAgentTerminal && showUserTerminal && (
+                        <Divider type="userTerminal" direction="horizontal" />
+                      )}
+
+                      {/* User terminal */}
+                      {showUserTerminal && (
+                        <div
+                          className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : 'flex-1'}`}
+                          style={showAgentTerminal ? { height: layoutSizes.userTerminalHeight } : undefined}
+                        >
+                          {userTerminal}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Show placeholder if nothing visible */}
+                  {!showAgentTerminal && !showUserTerminal && !fileViewer && (
+                    <div className="flex-1 flex items-center justify-center bg-bg-primary text-text-secondary">
+                      <div className="text-center">
+                        <p>No panels visible</p>
+                        <p className="text-sm mt-2">
+                          Press {formatShortcut('4')} for Agent or {formatShortcut('5')} for Terminal
+                        </p>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 /* Top position: file viewer on top, terminals below */
@@ -365,43 +431,40 @@ export default function Layout({
                     <div
                       className="flex-shrink-0 bg-bg-secondary min-h-0"
                       style={{
-                        height: showAgentTerminal ? fileViewerSize : undefined,
-                        flex: showAgentTerminal ? undefined : 1,
+                        height: (showAgentTerminal || showUserTerminal) ? layoutSizes.fileViewerSize : undefined,
+                        flex: (showAgentTerminal || showUserTerminal) ? undefined : 1,
                       }}
                     >
                       {fileViewer}
                     </div>
                   )}
 
-                  {/* Draggable divider (horizontal) - large hit area, small visual */}
-                  {fileViewer && showAgentTerminal && (
-                    <div
-                      onMouseDown={handleMouseDown}
-                      className="h-4 flex-shrink-0 cursor-row-resize flex items-center justify-center group"
-                    >
-                      <div className={`h-0.5 w-full transition-colors ${
-                        isDragging ? 'bg-accent' : 'bg-border group-hover:bg-accent/50'
-                      }`} />
-                    </div>
+                  {/* Draggable divider (horizontal) */}
+                  {fileViewer && (showAgentTerminal || showUserTerminal) && (
+                    <Divider type="fileViewer" direction="horizontal" />
                   )}
 
                   {/* Agent terminal */}
-                  <div
-                    className={`flex-1 min-w-0 bg-bg-primary ${
-                      showAgentTerminal ? '' : 'hidden'
-                    }`}
-                  >
-                    {agentTerminal}
-                  </div>
+                  {showAgentTerminal && (
+                    <div className="flex-1 min-w-0 bg-bg-primary">
+                      {agentTerminal}
+                    </div>
+                  )}
+
+                  {/* User terminal divider */}
+                  {showAgentTerminal && showUserTerminal && (
+                    <Divider type="userTerminal" direction="horizontal" />
+                  )}
 
                   {/* User terminal */}
-                  <div
-                    className={`h-48 flex-shrink-0 border-t border-border bg-bg-primary ${
-                      showUserTerminal ? '' : 'hidden'
-                    }`}
-                  >
-                    {userTerminal}
-                  </div>
+                  {showUserTerminal && (
+                    <div
+                      className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : 'flex-1'}`}
+                      style={showAgentTerminal ? { height: layoutSizes.userTerminalHeight } : undefined}
+                    >
+                      {userTerminal}
+                    </div>
+                  )}
 
                   {/* Show placeholder if no panels are visible */}
                   {!showFileViewer && !showAgentTerminal && !showUserTerminal && (
@@ -420,9 +483,15 @@ export default function Layout({
 
             {/* Right side panels (Diff) */}
             {diffPanel && (
-              <div className="w-80 flex-shrink-0 border-l border-border bg-bg-secondary overflow-y-auto">
-                {diffPanel}
-              </div>
+              <>
+                <Divider type="diff" direction="vertical" />
+                <div
+                  className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
+                  style={{ width: layoutSizes.diffPanelWidth }}
+                >
+                  {diffPanel}
+                </div>
+              </>
             )}
           </div>
         </div>

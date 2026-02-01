@@ -44,16 +44,32 @@ export type AgentData = {
   color?: string
 }
 
+export type LayoutSizesData = {
+  explorerWidth: number
+  fileViewerSize: number
+  userTerminalHeight: number
+  diffPanelWidth: number
+}
+
 export type SessionData = {
   id: string
   name: string
   directory: string
   agentId?: string | null
+  showAgentTerminal?: boolean
+  showUserTerminal?: boolean
+  showExplorer?: boolean
+  showFileViewer?: boolean
+  showDiff?: boolean
+  fileViewerPosition?: 'top' | 'left'
+  layoutSizes?: LayoutSizesData
 }
 
 export type ConfigData = {
   agents: AgentData[]
   sessions: SessionData[]
+  showSidebar?: boolean
+  sidebarWidth?: number
 }
 
 export type ConfigApi = {
