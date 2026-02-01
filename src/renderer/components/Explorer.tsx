@@ -4,6 +4,7 @@ import type { FileEntry, GitFileStatus } from '../../preload/index'
 interface ExplorerProps {
   directory?: string
   onFileSelect?: (filePath: string) => void
+  selectedFilePath?: string | null
 }
 
 interface TreeNode extends FileEntry {
@@ -11,7 +12,7 @@ interface TreeNode extends FileEntry {
   isExpanded?: boolean
 }
 
-export default function Explorer({ directory, onFileSelect }: ExplorerProps) {
+export default function Explorer({ directory, onFileSelect, selectedFilePath }: ExplorerProps) {
   const [tree, setTree] = useState<TreeNode[]>([])
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [gitStatus, setGitStatus] = useState<GitFileStatus[]>([])
@@ -124,12 +125,15 @@ export default function Explorer({ directory, onFileSelect }: ExplorerProps) {
     const isExpanded = expandedPaths.has(node.path)
     const status = getFileStatus(node.path)
     const statusColor = getStatusColor(status?.status)
+    const isSelected = !node.isDirectory && node.path === selectedFilePath
 
     return (
       <div key={node.path}>
         <div
           onClick={() => handleFileClick(node)}
-          className={`flex items-center gap-2 py-1 px-2 rounded hover:bg-bg-tertiary cursor-pointer ${statusColor}`}
+          className={`flex items-center gap-2 py-1 px-2 rounded cursor-pointer ${statusColor} ${
+            isSelected ? 'bg-accent/20 ring-1 ring-accent/50' : 'hover:bg-bg-tertiary'
+          }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
         >
           {node.isDirectory ? (

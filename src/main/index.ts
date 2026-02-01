@@ -352,6 +352,30 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
   }
 })
 
+ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
+  // In E2E test mode, return a tiny 1x1 transparent PNG as base64
+  if (isE2ETest) {
+    return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  }
+
+  try {
+    if (!existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`)
+    }
+    const stats = statSync(filePath)
+    if (stats.isDirectory()) {
+      throw new Error('Cannot read directory as file')
+    }
+    // Check if file is too large (over 10MB for images)
+    if (stats.size > 10 * 1024 * 1024) {
+      throw new Error('File is too large to display')
+    }
+    return readFileSync(filePath).toString('base64')
+  } catch (error) {
+    throw error
+  }
+})
+
 // Dialog IPC handlers
 ipcMain.handle('dialog:openFolder', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {

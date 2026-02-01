@@ -1,0 +1,32 @@
+export interface FileViewerPlugin {
+  /** Unique identifier for this viewer */
+  id: string
+  /** Display name shown in the viewer selector */
+  name: string
+  /** Icon to display in the viewer selector */
+  icon?: React.ReactNode
+  /** Check if this viewer can handle the given file path */
+  canHandle: (filePath: string) => boolean
+  /** Priority when multiple viewers can handle a file (higher = more preferred as default) */
+  priority: number
+  /** The component to render the file content */
+  component: React.ComponentType<FileViewerComponentProps>
+}
+
+export interface FileViewerComponentProps {
+  /** The file path to display */
+  filePath: string
+  /** The file content (already loaded) */
+  content: string
+}
+
+/** Get file extension from path */
+export function getFileExtension(filePath: string): string {
+  return filePath.split('.').pop()?.toLowerCase() || ''
+}
+
+/** Check if file matches any of the given extensions */
+export function matchesExtensions(filePath: string, extensions: string[]): boolean {
+  const ext = getFileExtension(filePath)
+  return extensions.includes(ext)
+}

@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
-import Editor, { loader } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
 import { basename } from 'path-browserify'
-
-// Configure Monaco to use locally bundled version instead of CDN
-loader.config({ monaco })
+import { getViewersForFile, isTextContent } from './fileViewers'
+import type { FileViewerPlugin } from './fileViewers'
 
 export type FileViewerPosition = 'top' | 'left'
 
@@ -15,59 +12,20 @@ interface FileViewerProps {
   onClose?: () => void
 }
 
-// Map file extensions to Monaco language IDs
-const getLanguageFromPath = (filePath: string): string => {
-  const ext = filePath.split('.').pop()?.toLowerCase() || ''
-  const languageMap: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescript',
-    js: 'javascript',
-    jsx: 'javascript',
-    json: 'json',
-    md: 'markdown',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    html: 'html',
-    htm: 'html',
-    xml: 'xml',
-    yaml: 'yaml',
-    yml: 'yaml',
-    py: 'python',
-    rb: 'ruby',
-    go: 'go',
-    rs: 'rust',
-    java: 'java',
-    c: 'c',
-    cpp: 'cpp',
-    h: 'c',
-    hpp: 'cpp',
-    cs: 'csharp',
-    php: 'php',
-    sh: 'shell',
-    bash: 'shell',
-    zsh: 'shell',
-    sql: 'sql',
-    graphql: 'graphql',
-    dockerfile: 'dockerfile',
-    makefile: 'makefile',
-    toml: 'ini',
-    ini: 'ini',
-    env: 'ini',
-  }
-  return languageMap[ext] || 'plaintext'
-}
-
 export default function FileViewer({ filePath, position = 'top', onPositionChange, onClose }: FileViewerProps) {
   const [content, setContent] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [availableViewers, setAvailableViewers] = useState<FileViewerPlugin[]>([])
+  const [selectedViewerId, setSelectedViewerId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!filePath) {
       setContent('')
       setIsLoading(false)
       setError(null)
+      setAvailableViewers([])
+      setSelectedViewerId(null)
       return
     }
 
@@ -77,19 +35,58 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
       setIsLoading(true)
       setError(null)
 
+      // Get viewers that can handle this file based on extension
+      let viewers = getViewersForFile(filePath)
+
+      // Check if any non-text viewer (like image) can handle this file
+      const hasNonTextViewer = viewers.some(v => v.id === 'image')
+
+      let data = ''
+      let readError: Error | null = null
+
+      // Try to read as text (may fail for binary files)
       try {
-        const data = await window.fs.readFile(filePath)
-        if (!cancelled) {
-          setContent(data)
-          setIsLoading(false)
-        }
+        data = await window.fs.readFile(filePath)
       } catch (err) {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : 'Failed to read file'
-          setError(message)
-          setIsLoading(false)
-        }
+        readError = err instanceof Error ? err : new Error('Failed to read file')
       }
+
+      if (cancelled) return
+
+      // If we couldn't read as text but have a non-text viewer, that's OK
+      if (readError && !hasNonTextViewer) {
+        setError(readError.message)
+        setIsLoading(false)
+        return
+      }
+
+      setContent(data)
+
+      // Filter viewers based on content
+      viewers = viewers.filter(viewer => {
+        // Image viewer doesn't need text content
+        if (viewer.id === 'image') return true
+        // Monaco viewer needs text content
+        if (viewer.id === 'monaco') {
+          return data && isTextContent(data)
+        }
+        // Other viewers need content
+        return !!data
+      })
+
+      setAvailableViewers(viewers)
+
+      // Select the highest priority viewer by default, or keep current if still available
+      if (viewers.length > 0) {
+        const currentStillAvailable = viewers.find(v => v.id === selectedViewerId)
+        if (!currentStillAvailable) {
+          setSelectedViewerId(viewers[0].id)
+        }
+      } else {
+        setSelectedViewerId(null)
+      }
+
+      setIsLoading(false)
     }
 
     loadFile()
@@ -123,17 +120,52 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
     )
   }
 
+  // Get the selected viewer
+  const selectedViewer = availableViewers.find(v => v.id === selectedViewerId)
+
+  if (!selectedViewer) {
+    return (
+      <div className="h-full flex items-center justify-center text-text-secondary text-sm">
+        No viewer available for this file type
+      </div>
+    )
+  }
+
   const fileName = basename(filePath)
-  const language = getLanguageFromPath(filePath)
+  const ViewerComponent = selectedViewer.component
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-3 border-b border-border flex items-center justify-between">
+      <div className="flex-shrink-0 p-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-medium text-text-primary truncate">{fileName}</span>
           <span className="text-xs text-text-secondary truncate">{filePath}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {/* Viewer selector icons when multiple viewers are available */}
+          {availableViewers.length > 1 && (
+            <div className="flex items-center gap-1 mr-2">
+              {availableViewers.map(viewer => (
+                <button
+                  key={viewer.id}
+                  onClick={() => setSelectedViewerId(viewer.id)}
+                  className={`p-1.5 rounded transition-colors ${
+                    selectedViewerId === viewer.id
+                      ? 'bg-accent text-white'
+                      : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                  }`}
+                  title={viewer.name}
+                >
+                  {viewer.icon || (
+                    <span className="text-xs font-medium w-4 h-4 flex items-center justify-center">
+                      {viewer.name.charAt(0)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Position toggle icons */}
           {onPositionChange && (
             <>
@@ -211,24 +243,8 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
           )}
         </div>
       </div>
-      <div className="flex-1">
-        <Editor
-          height="100%"
-          language={language}
-          value={content}
-          theme="vs-dark"
-          options={{
-            readOnly: true,
-            minimap: { enabled: false },
-            fontSize: 13,
-            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-            lineNumbers: 'on',
-            scrollBeyondLastLine: false,
-            wordWrap: 'on',
-            automaticLayout: true,
-            padding: { top: 8, bottom: 8 },
-          }}
-        />
+      <div className="flex-1 min-h-0">
+        <ViewerComponent filePath={filePath} content={content} />
       </div>
     </div>
   )

@@ -159,6 +159,7 @@ function App() {
             <Explorer
               directory={activeSession?.directory}
               onFileSelect={(filePath) => activeSessionId && selectFile(activeSessionId, filePath)}
+              selectedFilePath={activeSession?.selectedFilePath}
             />
           ) : null
         }

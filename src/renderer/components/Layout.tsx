@@ -302,7 +302,7 @@ export default function Layout({
                   {/* File viewer - left side */}
                   {fileViewer && (
                     <div
-                      className="flex-shrink-0 bg-bg-secondary overflow-hidden"
+                      className="flex-shrink-0 bg-bg-secondary min-h-0"
                       style={{
                         width: showAgentTerminal ? fileViewerSize : undefined,
                         flex: showAgentTerminal ? undefined : 1,
@@ -312,14 +312,16 @@ export default function Layout({
                     </div>
                   )}
 
-                  {/* Draggable divider (vertical) */}
+                  {/* Draggable divider (vertical) - large hit area, small visual */}
                   {fileViewer && showAgentTerminal && (
                     <div
                       onMouseDown={handleMouseDown}
-                      className={`w-2 flex-shrink-0 cursor-col-resize transition-colors ${
-                        isDragging ? 'bg-accent' : 'bg-border hover:bg-accent/50'
-                      }`}
-                    />
+                      className="w-4 flex-shrink-0 cursor-col-resize flex items-center justify-center group"
+                    >
+                      <div className={`w-0.5 h-full transition-colors ${
+                        isDragging ? 'bg-accent' : 'bg-border group-hover:bg-accent/50'
+                      }`} />
+                    </div>
                   )}
 
                   {/* Terminals container - right side */}
@@ -361,7 +363,7 @@ export default function Layout({
                   {/* File viewer - top */}
                   {fileViewer && (
                     <div
-                      className="flex-shrink-0 bg-bg-secondary overflow-hidden"
+                      className="flex-shrink-0 bg-bg-secondary min-h-0"
                       style={{
                         height: showAgentTerminal ? fileViewerSize : undefined,
                         flex: showAgentTerminal ? undefined : 1,
@@ -371,14 +373,16 @@ export default function Layout({
                     </div>
                   )}
 
-                  {/* Draggable divider (horizontal) */}
+                  {/* Draggable divider (horizontal) - large hit area, small visual */}
                   {fileViewer && showAgentTerminal && (
                     <div
                       onMouseDown={handleMouseDown}
-                      className={`h-2 flex-shrink-0 cursor-row-resize transition-colors ${
-                        isDragging ? 'bg-accent' : 'bg-border hover:bg-accent/50'
-                      }`}
-                    />
+                      className="h-4 flex-shrink-0 cursor-row-resize flex items-center justify-center group"
+                    >
+                      <div className={`h-0.5 w-full transition-colors ${
+                        isDragging ? 'bg-accent' : 'bg-border group-hover:bg-accent/50'
+                      }`} />
+                    </div>
                   )}
 
                   {/* Agent terminal */}
