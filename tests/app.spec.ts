@@ -90,16 +90,17 @@ test.describe('Agent Manager App', () => {
     await filesButton.click()
     await page.waitForTimeout(300)
 
-    // Check for file panel content (Tree button appears when panel is open)
-    const treeButton = page.locator('button:has-text("Tree")')
-    await expect(treeButton).toBeVisible()
+    // Check for file panel content (Files header appears when panel is open)
+    const filesHeader = page.locator('text=Files').nth(1) // Second one is in the panel
+    await expect(filesHeader).toBeVisible()
 
     // Toggle off
     await filesButton.click()
     await page.waitForTimeout(300)
 
-    // Tree button should not be visible
-    await expect(treeButton).not.toBeVisible()
+    // Panel should be gone (only button remains)
+    const panels = await page.locator('.w-64').count()
+    expect(panels).toBe(0)
   })
 
   test('should toggle Terminal panel', async () => {
@@ -220,9 +221,9 @@ test.describe('Layout', () => {
     const sidebar = page.locator('.w-56')
     await expect(sidebar).toBeVisible()
 
-    // Main content area
-    const mainContent = page.locator('.flex-1.flex.flex-col')
-    await expect(mainContent).toBeVisible()
+    // Main content area - look for the terminal area
+    const terminalArea = page.locator('.xterm').first()
+    await expect(terminalArea).toBeVisible()
   })
 
   test('should have status color indicators', async () => {
@@ -233,22 +234,29 @@ test.describe('Layout', () => {
 })
 
 test.describe('File Panel', () => {
-  test('should show Tree and Diff toggle buttons when panel is open', async () => {
+  test('should toggle Files and Diff panels independently', async () => {
     const filesButton = page.locator('button:has-text("Files")')
+    const diffButton = page.locator('button:has-text("Diff")')
 
-    // Open the file panel
+    // Open the Files panel
     await filesButton.click()
     await page.waitForTimeout(300)
 
-    // Check for Tree and Diff buttons
-    const treeButton = page.locator('button:has-text("Tree")')
-    const diffButton = page.locator('button:has-text("Diff")')
+    // Files panel should be visible
+    const filesPanel = page.locator('.w-64')
+    await expect(filesPanel).toBeVisible()
 
-    await expect(treeButton).toBeVisible()
-    await expect(diffButton).toBeVisible()
+    // Open Diff panel as well
+    await diffButton.click()
+    await page.waitForTimeout(300)
 
-    // Close the panel
+    // Diff panel should be visible
+    const diffPanel = page.locator('.w-80')
+    await expect(diffPanel).toBeVisible()
+
+    // Close both panels
     await filesButton.click()
+    await diffButton.click()
     await page.waitForTimeout(300)
   })
 

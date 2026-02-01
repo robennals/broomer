@@ -13,9 +13,27 @@ export type DialogApi = {
   openFolder: () => Promise<string | null>
 }
 
+export type FileEntry = {
+  name: string
+  path: string
+  isDirectory: boolean
+}
+
+export type GitFileStatus = {
+  path: string
+  status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
+}
+
+export type FsApi = {
+  readDir: (path: string) => Promise<FileEntry[]>
+  readFile: (path: string) => Promise<string>
+}
+
 export type GitApi = {
   getBranch: (path: string) => Promise<string>
   isGitRepo: (path: string) => Promise<boolean>
+  status: (path: string) => Promise<GitFileStatus[]>
+  diff: (repoPath: string, filePath?: string) => Promise<string>
 }
 
 export type AgentData = {
@@ -63,9 +81,16 @@ const dialogApi: DialogApi = {
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
 }
 
+const fsApi: FsApi = {
+  readDir: (path) => ipcRenderer.invoke('fs:readDir', path),
+  readFile: (path) => ipcRenderer.invoke('fs:readFile', path),
+}
+
 const gitApi: GitApi = {
   getBranch: (path) => ipcRenderer.invoke('git:getBranch', path),
   isGitRepo: (path) => ipcRenderer.invoke('git:isGitRepo', path),
+  status: (path) => ipcRenderer.invoke('git:status', path),
+  diff: (repoPath, filePath) => ipcRenderer.invoke('git:diff', repoPath, filePath),
 }
 
 const configApi: ConfigApi = {
@@ -75,6 +100,7 @@ const configApi: ConfigApi = {
 
 contextBridge.exposeInMainWorld('pty', ptyApi)
 contextBridge.exposeInMainWorld('dialog', dialogApi)
+contextBridge.exposeInMainWorld('fs', fsApi)
 contextBridge.exposeInMainWorld('git', gitApi)
 contextBridge.exposeInMainWorld('config', configApi)
 
@@ -82,6 +108,7 @@ declare global {
   interface Window {
     pty: PtyApi
     dialog: DialogApi
+    fs: FsApi
     git: GitApi
     config: ConfigApi
   }

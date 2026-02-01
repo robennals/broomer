@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { homedir } from 'os'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs'
 import * as pty from 'node-pty'
 import simpleGit from 'simple-git'
 
@@ -46,6 +46,14 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // Kill all PTY processes when window is closing
+  mainWindow.on('close', () => {
+    for (const [id, ptyProcess] of ptyProcesses) {
+      ptyProcess.kill()
+      ptyProcesses.delete(id)
+    }
+  })
 }
 
 // PTY IPC handlers
@@ -80,13 +88,17 @@ ipcMain.handle('pty:create', (_event, options: { id: string; cwd: string; comman
 
   ptyProcesses.set(options.id, ptyProcess)
 
-  // Forward data to renderer
+  // Forward data to renderer (check window is not destroyed)
   ptyProcess.onData((data) => {
-    mainWindow?.webContents.send(`pty:data:${options.id}`, data)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(`pty:data:${options.id}`, data)
+    }
   })
 
   ptyProcess.onExit(({ exitCode }) => {
-    mainWindow?.webContents.send(`pty:exit:${options.id}`, exitCode)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(`pty:exit:${options.id}`, exitCode)
+    }
     ptyProcesses.delete(options.id)
   })
 
@@ -222,6 +234,110 @@ ipcMain.handle('git:isGitRepo', async (_event, dirPath: string) => {
     return await git.checkIsRepo()
   } catch {
     return false
+  }
+})
+
+ipcMain.handle('git:status', async (_event, repoPath: string) => {
+  // In E2E test mode, return mock status
+  if (isE2ETest) {
+    return [
+      { path: 'src/index.ts', status: 'modified' },
+      { path: 'README.md', status: 'modified' },
+    ]
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    const status = await git.status()
+    const files: { path: string; status: string }[] = []
+
+    for (const file of status.modified) {
+      files.push({ path: file, status: 'modified' })
+    }
+    for (const file of status.created) {
+      files.push({ path: file, status: 'added' })
+    }
+    for (const file of status.deleted) {
+      files.push({ path: file, status: 'deleted' })
+    }
+    for (const file of status.renamed) {
+      files.push({ path: file.to, status: 'renamed' })
+    }
+    for (const file of status.not_added) {
+      files.push({ path: file, status: 'untracked' })
+    }
+
+    return files
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle('git:diff', async (_event, repoPath: string, filePath?: string) => {
+  // In E2E test mode, return mock diff
+  if (isE2ETest) {
+    return `diff --git a/src/index.ts b/src/index.ts
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,3 +1,4 @@
++// New comment
+ export function main() {
+   console.log('Hello')
+ }`
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    if (filePath) {
+      return await git.diff([filePath])
+    }
+    return await git.diff()
+  } catch {
+    return ''
+  }
+})
+
+// Filesystem IPC handlers
+ipcMain.handle('fs:readDir', async (_event, dirPath: string) => {
+  // In E2E test mode, return mock directory listing
+  if (isE2ETest) {
+    return [
+      { name: 'src', path: join(dirPath, 'src'), isDirectory: true },
+      { name: 'package.json', path: join(dirPath, 'package.json'), isDirectory: false },
+      { name: 'README.md', path: join(dirPath, 'README.md'), isDirectory: false },
+    ]
+  }
+
+  try {
+    const entries = readdirSync(dirPath, { withFileTypes: true })
+    return entries
+      .filter((entry) => !entry.name.startsWith('.')) // Hide hidden files
+      .map((entry) => ({
+        name: entry.name,
+        path: join(dirPath, entry.name),
+        isDirectory: entry.isDirectory(),
+      }))
+      .sort((a, b) => {
+        // Directories first, then alphabetically
+        if (a.isDirectory && !b.isDirectory) return -1
+        if (!a.isDirectory && b.isDirectory) return 1
+        return a.name.localeCompare(b.name)
+      })
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
+  // In E2E test mode, return mock file content
+  if (isE2ETest) {
+    return '// Mock file content for E2E tests\nexport const test = true;\n'
+  }
+
+  try {
+    return readFileSync(filePath, 'utf-8')
+  } catch {
+    return ''
   }
 })
 

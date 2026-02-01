@@ -10,6 +10,11 @@ export interface Session {
   branch: string
   status: SessionStatus
   agentId: string | null
+  // Per-session UI state (not persisted)
+  showAgentTerminal: boolean
+  showUserTerminal: boolean
+  showFileTree: boolean
+  showDiff: boolean
 }
 
 interface SessionStore {
@@ -24,6 +29,11 @@ interface SessionStore {
   setActiveSession: (id: string | null) => void
   updateSessionBranch: (id: string, branch: string) => void
   refreshAllBranches: () => Promise<void>
+  // UI state actions
+  toggleAgentTerminal: (id: string) => void
+  toggleUserTerminal: (id: string) => void
+  toggleFileTree: (id: string) => void
+  toggleDiff: (id: string) => void
 }
 
 const generateId = () => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -47,6 +57,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           branch,
           status: 'idle',
           agentId: sessionData.agentId ?? null,
+          // Default UI state
+          showAgentTerminal: true,
+          showUserTerminal: false,
+          showFileTree: false,
+          showDiff: false,
         })
       }
 
@@ -77,6 +92,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       branch,
       status: 'idle',
       agentId,
+      // Default UI state
+      showAgentTerminal: true,
+      showUserTerminal: false,
+      showFileTree: false,
+      showDiff: false,
     }
 
     const { sessions } = get()
@@ -147,5 +167,41 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         updateSessionBranch(session.id, branch)
       }
     }
+  },
+
+  toggleAgentTerminal: (id: string) => {
+    const { sessions } = get()
+    set({
+      sessions: sessions.map((s) =>
+        s.id === id ? { ...s, showAgentTerminal: !s.showAgentTerminal } : s
+      ),
+    })
+  },
+
+  toggleUserTerminal: (id: string) => {
+    const { sessions } = get()
+    set({
+      sessions: sessions.map((s) =>
+        s.id === id ? { ...s, showUserTerminal: !s.showUserTerminal } : s
+      ),
+    })
+  },
+
+  toggleFileTree: (id: string) => {
+    const { sessions } = get()
+    set({
+      sessions: sessions.map((s) =>
+        s.id === id ? { ...s, showFileTree: !s.showFileTree } : s
+      ),
+    })
+  },
+
+  toggleDiff: (id: string) => {
+    const { sessions } = get()
+    set({
+      sessions: sessions.map((s) =>
+        s.id === id ? { ...s, showDiff: !s.showDiff } : s
+      ),
+    })
   },
 }))

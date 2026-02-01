@@ -54,11 +54,9 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
   }
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this agent?')) {
-      await removeAgent(id)
-      if (editingId === id) {
-        resetForm()
-      }
+    await removeAgent(id)
+    if (editingId === id) {
+      resetForm()
     }
   }
 

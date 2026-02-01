@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { useErrorStore } from '../store/errors'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
@@ -14,13 +15,10 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const [ptyId, setPtyId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { addError } = useErrorStore()
 
   useEffect(() => {
     if (!containerRef.current || !sessionId) return
-
-    // Reset error state
-    setError(null)
 
     // Create terminal
     const terminal = new XTerm({
@@ -61,6 +59,17 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
     terminal.open(containerRef.current)
     fitAddon.fit()
 
+    // Intercept keyboard shortcuts - return false to let them bubble to the app
+    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      // Let Cmd/Ctrl + 1/2/3/4/5/6 pass through to the app
+      if (e.metaKey || e.ctrlKey) {
+        if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+          return false // Don't handle in terminal, let it bubble
+        }
+      }
+      return true // Handle normally in terminal
+    })
+
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
@@ -92,8 +101,8 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
         }
       })
       .catch((err) => {
-        console.error('Failed to create PTY:', err)
-        setError(`Failed to start terminal: ${err.message || err}`)
+        const errorMsg = `Failed to start terminal: ${err.message || err}`
+        addError(errorMsg)
         terminal.write(`\r\n\x1b[31mError: Failed to start terminal\x1b[0m\r\n`)
         terminal.write(`\x1b[33m${err.message || err}\x1b[0m\r\n`)
       })

@@ -1,12 +1,14 @@
-import { useEffect } from 'react'
+import React, { useEffect } from 'react'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
 import Terminal from './components/Terminal'
-import FilePanel from './components/FilePanel'
+import FileTree from './components/FileTree'
+import DiffPanel from './components/DiffPanel'
 import AgentSettings from './components/AgentSettings'
 import NewSessionDialog from './components/NewSessionDialog'
 import { useSessionStore, type Session, type SessionStatus } from './store/sessions'
 import { useAgentStore } from './store/agents'
+import { useErrorStore } from './store/errors'
 
 // Re-export types for backwards compatibility
 export type { Session, SessionStatus }
@@ -21,12 +23,16 @@ function App() {
     removeSession,
     setActiveSession,
     refreshAllBranches,
+    toggleAgentTerminal,
+    toggleUserTerminal,
+    toggleFileTree,
+    toggleDiff,
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
+  const { addError } = useErrorStore()
 
-  const [showFilePanel, setShowFilePanel] = React.useState(false)
-  const [showUserTerminal, setShowUserTerminal] = React.useState(false)
+  const [showSidebar, setShowSidebar] = React.useState(true)
   const [showSettings, setShowSettings] = React.useState(false)
   const [pendingFolderPath, setPendingFolderPath] = React.useState<string | null>(null)
 
@@ -62,7 +68,7 @@ function App() {
       try {
         await addSession(pendingFolderPath, agentId)
       } catch (error) {
-        console.error('Failed to add session:', error)
+        addError(`Failed to add session: ${error instanceof Error ? error.message : error}`)
       }
       setPendingFolderPath(null)
     }
@@ -90,8 +96,11 @@ function App() {
   return (
     <>
       <Layout
-        showFilePanel={showFilePanel}
-        showUserTerminal={showUserTerminal}
+        showSidebar={showSidebar}
+        showFileTree={activeSession?.showFileTree ?? false}
+        showAgentTerminal={activeSession?.showAgentTerminal ?? true}
+        showUserTerminal={activeSession?.showUserTerminal ?? false}
+        showDiff={activeSession?.showDiff ?? false}
         showSettings={showSettings}
         sidebar={
           <SessionList
@@ -102,7 +111,7 @@ function App() {
             onDeleteSession={removeSession}
           />
         }
-        mainTerminal={
+        agentTerminal={
           <div className="h-full w-full relative">
             {sessions.map((session) => (
               <div
@@ -126,8 +135,6 @@ function App() {
             )}
           </div>
         }
-        filePanel={showFilePanel ? <FilePanel directory={activeSession?.directory} /> : null}
-        settingsPanel={showSettings ? <AgentSettings onClose={() => setShowSettings(false)} /> : null}
         userTerminal={
           <div className="h-full w-full relative">
             {sessions.map((session) => (
@@ -140,8 +147,22 @@ function App() {
             ))}
           </div>
         }
-        onToggleFilePanel={() => setShowFilePanel(!showFilePanel)}
-        onToggleUserTerminal={() => setShowUserTerminal(!showUserTerminal)}
+        fileTree={
+          activeSession?.showFileTree ? (
+            <FileTree directory={activeSession?.directory} />
+          ) : null
+        }
+        diffPanel={
+          activeSession?.showDiff ? (
+            <DiffPanel directory={activeSession?.directory} />
+          ) : null
+        }
+        settingsPanel={showSettings ? <AgentSettings onClose={() => setShowSettings(false)} /> : null}
+        onToggleSidebar={() => setShowSidebar(!showSidebar)}
+        onToggleFileTree={() => activeSessionId && toggleFileTree(activeSessionId)}
+        onToggleAgentTerminal={() => activeSessionId && toggleAgentTerminal(activeSessionId)}
+        onToggleUserTerminal={() => activeSessionId && toggleUserTerminal(activeSessionId)}
+        onToggleDiff={() => activeSessionId && toggleDiff(activeSessionId)}
         onToggleSettings={() => setShowSettings(!showSettings)}
       />
 
@@ -156,8 +177,5 @@ function App() {
     </>
   )
 }
-
-// Need to import React for useState
-import React from 'react'
 
 export default App
