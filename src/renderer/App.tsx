@@ -2,7 +2,8 @@ import React, { useEffect } from 'react'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
 import Terminal from './components/Terminal'
-import FileTree from './components/FileTree'
+import Explorer from './components/Explorer'
+import FileViewer, { type FileViewerPosition } from './components/FileViewer'
 import DiffPanel from './components/DiffPanel'
 import AgentSettings from './components/AgentSettings'
 import NewSessionDialog from './components/NewSessionDialog'
@@ -25,8 +26,10 @@ function App() {
     refreshAllBranches,
     toggleAgentTerminal,
     toggleUserTerminal,
-    toggleFileTree,
+    toggleExplorer,
+    toggleFileViewer,
     toggleDiff,
+    selectFile,
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
@@ -35,6 +38,7 @@ function App() {
   const [showSidebar, setShowSidebar] = React.useState(true)
   const [showSettings, setShowSettings] = React.useState(false)
   const [pendingFolderPath, setPendingFolderPath] = React.useState<string | null>(null)
+  const [fileViewerPosition, setFileViewerPosition] = React.useState<FileViewerPosition>('top')
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
 
@@ -97,11 +101,14 @@ function App() {
     <>
       <Layout
         showSidebar={showSidebar}
-        showFileTree={activeSession?.showFileTree ?? false}
+        showExplorer={activeSession?.showExplorer ?? false}
+        showFileViewer={activeSession?.showFileViewer ?? false}
         showAgentTerminal={activeSession?.showAgentTerminal ?? true}
         showUserTerminal={activeSession?.showUserTerminal ?? false}
         showDiff={activeSession?.showDiff ?? false}
         showSettings={showSettings}
+        fileViewerPosition={fileViewerPosition}
+        onFileViewerPositionChange={setFileViewerPosition}
         sidebar={
           <SessionList
             sessions={sessions}
@@ -147,9 +154,22 @@ function App() {
             ))}
           </div>
         }
-        fileTree={
-          activeSession?.showFileTree ? (
-            <FileTree directory={activeSession?.directory} />
+        explorer={
+          activeSession?.showExplorer ? (
+            <Explorer
+              directory={activeSession?.directory}
+              onFileSelect={(filePath) => activeSessionId && selectFile(activeSessionId, filePath)}
+            />
+          ) : null
+        }
+        fileViewer={
+          activeSession?.showFileViewer ? (
+            <FileViewer
+              filePath={activeSession?.selectedFilePath ?? null}
+              position={fileViewerPosition}
+              onPositionChange={setFileViewerPosition}
+              onClose={() => activeSessionId && toggleFileViewer(activeSessionId)}
+            />
           ) : null
         }
         diffPanel={
@@ -159,7 +179,8 @@ function App() {
         }
         settingsPanel={showSettings ? <AgentSettings onClose={() => setShowSettings(false)} /> : null}
         onToggleSidebar={() => setShowSidebar(!showSidebar)}
-        onToggleFileTree={() => activeSessionId && toggleFileTree(activeSessionId)}
+        onToggleExplorer={() => activeSessionId && toggleExplorer(activeSessionId)}
+        onToggleFileViewer={() => activeSessionId && toggleFileViewer(activeSessionId)}
         onToggleAgentTerminal={() => activeSessionId && toggleAgentTerminal(activeSessionId)}
         onToggleUserTerminal={() => activeSessionId && toggleUserTerminal(activeSessionId)}
         onToggleDiff={() => activeSessionId && toggleDiff(activeSessionId)}

@@ -13,8 +13,10 @@ export interface Session {
   // Per-session UI state (not persisted)
   showAgentTerminal: boolean
   showUserTerminal: boolean
-  showFileTree: boolean
+  showExplorer: boolean
+  showFileViewer: boolean
   showDiff: boolean
+  selectedFilePath: string | null
 }
 
 interface SessionStore {
@@ -32,8 +34,10 @@ interface SessionStore {
   // UI state actions
   toggleAgentTerminal: (id: string) => void
   toggleUserTerminal: (id: string) => void
-  toggleFileTree: (id: string) => void
+  toggleExplorer: (id: string) => void
+  toggleFileViewer: (id: string) => void
   toggleDiff: (id: string) => void
+  selectFile: (id: string, filePath: string) => void
 }
 
 const generateId = () => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -60,8 +64,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           // Default UI state
           showAgentTerminal: true,
           showUserTerminal: false,
-          showFileTree: false,
+          showExplorer: false,
+          showFileViewer: false,
           showDiff: false,
+          selectedFilePath: null,
         })
       }
 
@@ -95,8 +101,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // Default UI state
       showAgentTerminal: true,
       showUserTerminal: false,
-      showFileTree: false,
+      showExplorer: false,
+      showFileViewer: false,
       showDiff: false,
+      selectedFilePath: null,
     }
 
     const { sessions } = get()
@@ -187,11 +195,20 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     })
   },
 
-  toggleFileTree: (id: string) => {
+  toggleExplorer: (id: string) => {
     const { sessions } = get()
     set({
       sessions: sessions.map((s) =>
-        s.id === id ? { ...s, showFileTree: !s.showFileTree } : s
+        s.id === id ? { ...s, showExplorer: !s.showExplorer } : s
+      ),
+    })
+  },
+
+  toggleFileViewer: (id: string) => {
+    const { sessions } = get()
+    set({
+      sessions: sessions.map((s) =>
+        s.id === id ? { ...s, showFileViewer: !s.showFileViewer } : s
       ),
     })
   },
@@ -201,6 +218,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set({
       sessions: sessions.map((s) =>
         s.id === id ? { ...s, showDiff: !s.showDiff } : s
+      ),
+    })
+  },
+
+  selectFile: (id: string, filePath: string) => {
+    const { sessions } = get()
+    set({
+      sessions: sessions.map((s) =>
+        s.id === id ? { ...s, selectedFilePath: filePath, showFileViewer: true } : s
       ),
     })
   },

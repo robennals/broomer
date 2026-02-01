@@ -335,9 +335,20 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
   }
 
   try {
+    if (!existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`)
+    }
+    const stats = statSync(filePath)
+    if (stats.isDirectory()) {
+      throw new Error('Cannot read directory as file')
+    }
+    // Check if file is too large (over 5MB)
+    if (stats.size > 5 * 1024 * 1024) {
+      throw new Error('File is too large to display')
+    }
     return readFileSync(filePath, 'utf-8')
-  } catch {
-    return ''
+  } catch (error) {
+    throw error // Re-throw to send error to renderer
   }
 })
 

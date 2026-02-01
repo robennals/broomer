@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { FileEntry, GitFileStatus } from '../../preload/index'
 
-interface FileTreeProps {
+interface ExplorerProps {
   directory?: string
+  onFileSelect?: (filePath: string) => void
 }
 
 interface TreeNode extends FileEntry {
@@ -10,7 +11,7 @@ interface TreeNode extends FileEntry {
   isExpanded?: boolean
 }
 
-export default function FileTree({ directory }: FileTreeProps) {
+export default function Explorer({ directory, onFileSelect }: ExplorerProps) {
   const [tree, setTree] = useState<TreeNode[]>([])
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [gitStatus, setGitStatus] = useState<GitFileStatus[]>([])
@@ -70,6 +71,15 @@ export default function FileTree({ directory }: FileTreeProps) {
     setExpandedPaths(newExpanded)
   }
 
+  // Handle file click
+  const handleFileClick = (node: TreeNode) => {
+    if (node.isDirectory) {
+      toggleExpand(node)
+    } else if (onFileSelect) {
+      onFileSelect(node.path)
+    }
+  }
+
   // Update a node in the tree
   const updateTreeNode = (
     nodes: TreeNode[],
@@ -118,7 +128,7 @@ export default function FileTree({ directory }: FileTreeProps) {
     return (
       <div key={node.path}>
         <div
-          onClick={() => node.isDirectory && toggleExpand(node)}
+          onClick={() => handleFileClick(node)}
           className={`flex items-center gap-2 py-1 px-2 rounded hover:bg-bg-tertiary cursor-pointer ${statusColor}`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
         >
@@ -167,7 +177,7 @@ export default function FileTree({ directory }: FileTreeProps) {
   return (
     <div className="h-full flex flex-col">
       <div className="p-3 border-b border-border">
-        <span className="text-sm font-medium text-text-primary">Files</span>
+        <span className="text-sm font-medium text-text-primary">Explorer</span>
       </div>
       <div className="flex-1 overflow-y-auto p-2 text-sm">
         <div className="text-text-secondary mb-2 px-2 truncate text-xs">

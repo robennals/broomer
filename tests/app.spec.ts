@@ -82,17 +82,17 @@ test.describe('Agent Manager App', () => {
     await expect(featureBranch).toBeVisible()
   })
 
-  test('should toggle Files panel', async () => {
-    const filesButton = page.locator('button:has-text("Files")')
+  test('should toggle Explorer panel', async () => {
+    const filesButton = page.locator('button:has-text("Explorer")')
     await expect(filesButton).toBeVisible()
 
     // Click to toggle on
     await filesButton.click()
     await page.waitForTimeout(300)
 
-    // Check for file panel content (Files header appears when panel is open)
-    const filesHeader = page.locator('text=Files').nth(1) // Second one is in the panel
-    await expect(filesHeader).toBeVisible()
+    // Check for explorer panel content (Explorer header appears when panel is open)
+    const explorerHeader = page.locator('text=Explorer').nth(1) // Second one is in the panel
+    await expect(explorerHeader).toBeVisible()
 
     // Toggle off
     await filesButton.click()
@@ -233,18 +233,18 @@ test.describe('Layout', () => {
   })
 })
 
-test.describe('File Panel', () => {
-  test('should toggle Files and Diff panels independently', async () => {
-    const filesButton = page.locator('button:has-text("Files")')
+test.describe('Explorer Panel', () => {
+  test('should toggle Explorer and Diff panels independently', async () => {
+    const explorerButton = page.locator('button:has-text("Explorer")')
     const diffButton = page.locator('button:has-text("Diff")')
 
-    // Open the Files panel
-    await filesButton.click()
+    // Open the Explorer panel
+    await explorerButton.click()
     await page.waitForTimeout(300)
 
-    // Files panel should be visible
-    const filesPanel = page.locator('.w-64')
-    await expect(filesPanel).toBeVisible()
+    // Explorer panel should be visible
+    const explorerPanel = page.locator('.w-64')
+    await expect(explorerPanel).toBeVisible()
 
     // Open Diff panel as well
     await diffButton.click()
@@ -255,16 +255,16 @@ test.describe('File Panel', () => {
     await expect(diffPanel).toBeVisible()
 
     // Close both panels
-    await filesButton.click()
+    await explorerButton.click()
     await diffButton.click()
     await page.waitForTimeout(300)
   })
 
   test('should show file tree placeholder items', async () => {
-    const filesButton = page.locator('button:has-text("Files")')
+    const explorerButton = page.locator('button:has-text("Explorer")')
 
-    // Open the file panel
-    await filesButton.click()
+    // Open the explorer panel
+    await explorerButton.click()
     await page.waitForTimeout(300)
 
     // Check for placeholder file items
@@ -275,15 +275,15 @@ test.describe('File Panel', () => {
     await expect(packageJson).toBeVisible()
 
     // Close the panel
-    await filesButton.click()
+    await explorerButton.click()
     await page.waitForTimeout(300)
   })
 
-  test('should show directory path in file panel', async () => {
-    const filesButton = page.locator('button:has-text("Files")')
+  test('should show directory path in explorer panel', async () => {
+    const explorerButton = page.locator('button:has-text("Explorer")')
 
-    // Open the file panel
-    await filesButton.click()
+    // Open the explorer panel
+    await explorerButton.click()
     await page.waitForTimeout(300)
 
     // The demo sessions use /tmp/e2e-* directories - use partial match
@@ -291,33 +291,33 @@ test.describe('File Panel', () => {
     await expect(directoryPath).toBeVisible()
 
     // Close the panel
-    await filesButton.click()
+    await explorerButton.click()
     await page.waitForTimeout(300)
   })
 })
 
 test.describe('Button States', () => {
-  test('should highlight Files button when panel is open', async () => {
-    const filesButton = page.locator('button:has-text("Files")')
+  test('should highlight Explorer button when panel is open', async () => {
+    const explorerButton = page.locator('button:has-text("Explorer")')
 
     // Initially not highlighted
-    let classes = await filesButton.getAttribute('class')
+    let classes = await explorerButton.getAttribute('class')
     expect(classes).not.toContain('bg-accent')
 
     // Open panel
-    await filesButton.click()
+    await explorerButton.click()
     await page.waitForTimeout(300)
 
     // Should be highlighted
-    classes = await filesButton.getAttribute('class')
+    classes = await explorerButton.getAttribute('class')
     expect(classes).toContain('bg-accent')
 
     // Close panel
-    await filesButton.click()
+    await explorerButton.click()
     await page.waitForTimeout(300)
 
     // No longer highlighted
-    classes = await filesButton.getAttribute('class')
+    classes = await explorerButton.getAttribute('class')
     expect(classes).not.toContain('bg-accent')
   })
 
