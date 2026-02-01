@@ -27,7 +27,9 @@ export type GitFileStatus = {
 export type FsApi = {
   readDir: (path: string) => Promise<FileEntry[]>
   readFile: (path: string) => Promise<string>
+  writeFile: (path: string, content: string) => Promise<{ success: boolean; error?: string }>
   readFileBase64: (path: string) => Promise<string>
+  exists: (path: string) => Promise<boolean>
 }
 
 export type GitApi = {
@@ -101,7 +103,9 @@ const dialogApi: DialogApi = {
 const fsApi: FsApi = {
   readDir: (path) => ipcRenderer.invoke('fs:readDir', path),
   readFile: (path) => ipcRenderer.invoke('fs:readFile', path),
+  writeFile: (path, content) => ipcRenderer.invoke('fs:writeFile', path, content),
   readFileBase64: (path) => ipcRenderer.invoke('fs:readFileBase64', path),
+  exists: (path) => ipcRenderer.invoke('fs:exists', path),
 }
 
 const gitApi: GitApi = {

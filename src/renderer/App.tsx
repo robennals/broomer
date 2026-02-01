@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
+import type { GitFileStatus } from '../preload/index'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
 import Terminal from './components/Terminal'
@@ -49,10 +50,63 @@ function App() {
   const { agents, loadAgents } = useAgentStore()
   const { addError } = useErrorStore()
 
-  const [showSettings, setShowSettings] = React.useState(false)
-  const [pendingFolderPath, setPendingFolderPath] = React.useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [pendingFolderPath, setPendingFolderPath] = useState<string | null>(null)
+  const [gitStatusBySession, setGitStatusBySession] = useState<Record<string, GitFileStatus[]>>({})
+  const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
+  const activeDirectoryExists = activeSession ? (directoryExists[activeSession.id] ?? true) : true
+
+  // Check if session directories exist
+  useEffect(() => {
+    const checkDirectories = async () => {
+      const results: Record<string, boolean> = {}
+      for (const session of sessions) {
+        results[session.id] = await window.fs.exists(session.directory)
+      }
+      setDirectoryExists(results)
+    }
+
+    if (sessions.length > 0) {
+      checkDirectories()
+    }
+  }, [sessions])
+
+  // Fetch git status for active session
+  const fetchGitStatus = useCallback(async () => {
+    if (!activeSession) return
+    try {
+      const status = await window.git.status(activeSession.directory)
+      setGitStatusBySession(prev => ({
+        ...prev,
+        [activeSession.id]: status
+      }))
+    } catch {
+      // Ignore errors
+    }
+  }, [activeSession?.id, activeSession?.directory])
+
+  // Poll git status every 2 seconds
+  useEffect(() => {
+    if (activeSession) {
+      fetchGitStatus()
+      const interval = setInterval(fetchGitStatus, 2000)
+      return () => clearInterval(interval)
+    }
+  }, [activeSession?.id, fetchGitStatus])
+
+  // Get git status for the selected file
+  const selectedFileStatus = React.useMemo(() => {
+    if (!activeSession?.selectedFilePath || !activeSession?.directory) return null
+    const status = gitStatusBySession[activeSession.id] || []
+    const relativePath = activeSession.selectedFilePath.replace(activeSession.directory + '/', '')
+    const fileStatus = status.find(s => s.path === relativePath)
+    return fileStatus?.status ?? null
+  }, [activeSession?.selectedFilePath, activeSession?.directory, activeSession?.id, gitStatusBySession])
+
+  // Get current git status list for the active session
+  const activeSessionGitStatus = activeSession ? (gitStatusBySession[activeSession.id] || []) : []
 
   // Load sessions and agents on mount
   useEffect(() => {
@@ -134,6 +188,7 @@ function App() {
         layoutSizes={activeSession?.layoutSizes ?? DEFAULT_LAYOUT_SIZES}
         onSidebarWidthChange={setSidebarWidth}
         onLayoutSizeChange={handleLayoutSizeChange}
+        errorMessage={activeSession && !activeDirectoryExists ? `Folder not found: ${activeSession.directory}` : null}
         sidebar={
           <SessionList
             sessions={sessions}
@@ -185,6 +240,7 @@ function App() {
               directory={activeSession?.directory}
               onFileSelect={(filePath) => activeSessionId && selectFile(activeSessionId, filePath)}
               selectedFilePath={activeSession?.selectedFilePath}
+              gitStatus={activeSessionGitStatus}
             />
           ) : null
         }
@@ -195,6 +251,9 @@ function App() {
               position={activeSession?.fileViewerPosition ?? 'top'}
               onPositionChange={handleFileViewerPositionChange}
               onClose={() => activeSessionId && toggleFileViewer(activeSessionId)}
+              fileStatus={selectedFileStatus}
+              directory={activeSession?.directory}
+              onSaveComplete={fetchGitStatus}
             />
           ) : null
         }

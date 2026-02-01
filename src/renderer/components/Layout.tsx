@@ -23,6 +23,7 @@ interface LayoutProps {
   fileViewerPosition: FileViewerPosition
   sidebarWidth: number
   layoutSizes: LayoutSizes
+  errorMessage?: string | null // Show this instead of panels if set
   onSidebarWidthChange: (width: number) => void
   onLayoutSizeChange: (key: keyof LayoutSizes, value: number) => void
   onToggleSidebar: () => void
@@ -60,6 +61,7 @@ export default function Layout({
   fileViewerPosition,
   sidebarWidth,
   layoutSizes,
+  errorMessage,
   onSidebarWidthChange,
   onLayoutSizeChange,
   onToggleSidebar,
@@ -142,6 +144,33 @@ export default function Layout({
     }
   }, [draggingDivider, fileViewerPosition, sidebarWidth, showSidebar, onSidebarWidthChange, onLayoutSizeChange])
 
+  // Handle panel toggle by key
+  const handleToggleByKey = useCallback((key: string) => {
+    switch (key) {
+      case '1':
+        onToggleSidebar()
+        break
+      case '2':
+        onToggleExplorer()
+        break
+      case '3':
+        onToggleFileViewer()
+        break
+      case '4':
+        onToggleAgentTerminal()
+        break
+      case '5':
+        onToggleUserTerminal()
+        break
+      case '6':
+        onToggleDiff()
+        break
+      case '7':
+        onToggleSettings()
+        break
+    }
+  }, [onToggleSidebar, onToggleExplorer, onToggleFileViewer, onToggleAgentTerminal, onToggleUserTerminal, onToggleDiff, onToggleSettings])
+
   // Keyboard shortcuts - use capture phase to intercept before terminal gets them
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -151,48 +180,26 @@ export default function Layout({
         return
       }
 
-      switch (e.key) {
-        case '1':
-          e.preventDefault()
-          e.stopPropagation()
-          onToggleSidebar()
-          break
-        case '2':
-          e.preventDefault()
-          e.stopPropagation()
-          onToggleExplorer()
-          break
-        case '3':
-          e.preventDefault()
-          e.stopPropagation()
-          onToggleFileViewer()
-          break
-        case '4':
-          e.preventDefault()
-          e.stopPropagation()
-          onToggleAgentTerminal()
-          break
-        case '5':
-          e.preventDefault()
-          e.stopPropagation()
-          onToggleUserTerminal()
-          break
-        case '6':
-          e.preventDefault()
-          e.stopPropagation()
-          onToggleDiff()
-          break
-        case '7':
-          e.preventDefault()
-          e.stopPropagation()
-          onToggleSettings()
-          break
+      if (['1', '2', '3', '4', '5', '6', '7'].includes(e.key)) {
+        e.preventDefault()
+        e.stopPropagation()
+        handleToggleByKey(e.key)
       }
     }
 
+    // Also listen for custom events from Terminal (xterm may block normal event bubbling)
+    const handleCustomToggle = (e: Event) => {
+      const customEvent = e as CustomEvent<{ key: string }>
+      handleToggleByKey(customEvent.detail.key)
+    }
+
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [onToggleSidebar, onToggleExplorer, onToggleFileViewer, onToggleAgentTerminal, onToggleUserTerminal, onToggleDiff, onToggleSettings])
+    window.addEventListener('app:toggle-panel', handleCustomToggle)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('app:toggle-panel', handleCustomToggle)
+    }
+  }, [handleToggleByKey])
 
   // Divider component - wide hit area, thin visual line
   const Divider = ({ type, direction }: { type: DividerType; direction: 'horizontal' | 'vertical' }) => (
@@ -344,22 +351,31 @@ export default function Layout({
         <div className="flex-1 flex flex-col min-w-0">
           {/* Main row: terminals + side panels */}
           <div className="flex-1 flex min-h-0">
-            {/* Left side panels (Explorer) */}
-            {explorer && (
-              <>
-                <div
-                  className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
-                  style={{ width: layoutSizes.explorerWidth }}
-                >
-                  {explorer}
+            {/* Show error message instead of panels if set */}
+            {errorMessage ? (
+              <div className="flex-1 flex items-center justify-center bg-bg-primary text-text-secondary">
+                <div className="text-center">
+                  <p className="text-red-400">{errorMessage}</p>
                 </div>
-                <Divider type="explorer" direction="vertical" />
-              </>
-            )}
+              </div>
+            ) : (
+              <>
+                {/* Left side panels (Explorer) */}
+                {explorer && (
+                  <>
+                    <div
+                      className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
+                      style={{ width: layoutSizes.explorerWidth }}
+                    >
+                      {explorer}
+                    </div>
+                    <Divider type="explorer" direction="vertical" />
+                  </>
+                )}
 
-            {/* Center: file viewer + terminals or settings */}
-            <div ref={containerRef} className={`flex-1 min-w-0 ${fileViewerPosition === 'left' && fileViewer ? 'flex' : 'flex flex-col'}`}>
-              {settingsPanel ? (
+                {/* Center: file viewer + terminals or settings */}
+                <div ref={containerRef} className={`flex-1 min-w-0 ${fileViewerPosition === 'left' && fileViewer ? 'flex' : 'flex flex-col'}`}>
+                  {settingsPanel ? (
                 <div className="flex-1 min-w-0 bg-bg-secondary overflow-y-auto">
                   {settingsPanel}
                 </div>
@@ -389,7 +405,7 @@ export default function Layout({
                     <div className="flex-1 flex flex-col min-w-0">
                       {/* Agent terminal */}
                       {showAgentTerminal && (
-                        <div className="flex-1 min-w-0 bg-bg-primary">
+                        <div className={`flex-1 min-w-0 bg-bg-primary ${showUserTerminal ? 'border-b border-border' : ''}`}>
                           {agentTerminal}
                         </div>
                       )}
@@ -446,7 +462,7 @@ export default function Layout({
 
                   {/* Agent terminal */}
                   {showAgentTerminal && (
-                    <div className="flex-1 min-w-0 bg-bg-primary">
+                    <div className={`flex-1 min-w-0 bg-bg-primary ${showUserTerminal ? 'border-b border-border' : ''}`}>
                       {agentTerminal}
                     </div>
                   )}
@@ -481,16 +497,18 @@ export default function Layout({
               )}
             </div>
 
-            {/* Right side panels (Diff) */}
-            {diffPanel && (
-              <>
-                <Divider type="diff" direction="vertical" />
-                <div
-                  className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
-                  style={{ width: layoutSizes.diffPanelWidth }}
-                >
-                  {diffPanel}
-                </div>
+                {/* Right side panels (Diff) */}
+                {diffPanel && (
+                  <>
+                    <Divider type="diff" direction="vertical" />
+                    <div
+                      className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
+                      style={{ width: layoutSizes.diffPanelWidth }}
+                    >
+                      {diffPanel}
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>

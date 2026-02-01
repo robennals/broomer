@@ -98,9 +98,9 @@ test.describe('Agent Manager App', () => {
     await filesButton.click()
     await page.waitForTimeout(300)
 
-    // Panel should be gone (only button remains)
-    const panels = await page.locator('.w-64').count()
-    expect(panels).toBe(0)
+    // Panel should be gone - check that Explorer header (second instance) is not visible
+    const explorerHeaders = await page.locator('text=Explorer').count()
+    expect(explorerHeaders).toBe(1) // Only the button remains
   })
 
   test('should toggle Terminal panel', async () => {
@@ -213,13 +213,13 @@ test.describe('Terminal Integration', () => {
 
 test.describe('Layout', () => {
   test('should have correct layout structure', async () => {
-    // Title bar
-    const titleBar = page.locator('.h-10.flex.items-center')
+    // Title bar - look for the app title text
+    const titleBar = page.locator('text=Agent Manager').first()
     await expect(titleBar).toBeVisible()
 
-    // Sidebar
-    const sidebar = page.locator('.w-56')
-    await expect(sidebar).toBeVisible()
+    // Sidebar - contains session list with "+ New Session" button
+    const newSessionBtn = page.locator('button:has-text("+ New Session")')
+    await expect(newSessionBtn).toBeVisible()
 
     // Main content area - look for the terminal area
     const terminalArea = page.locator('.xterm').first()
@@ -242,17 +242,17 @@ test.describe('Explorer Panel', () => {
     await explorerButton.click()
     await page.waitForTimeout(300)
 
-    // Explorer panel should be visible
-    const explorerPanel = page.locator('.w-64')
-    await expect(explorerPanel).toBeVisible()
+    // Explorer panel should be visible - check for the Explorer header text inside the panel
+    const explorerHeader = page.locator('text=Explorer').nth(1) // Second instance is the panel header
+    await expect(explorerHeader).toBeVisible()
 
     // Open Diff panel as well
     await diffButton.click()
     await page.waitForTimeout(300)
 
-    // Diff panel should be visible
-    const diffPanel = page.locator('.w-80')
-    await expect(diffPanel).toBeVisible()
+    // Diff panel should be visible - check for "Changes" header in the panel
+    const diffHeader = page.locator('text=Changes').first()
+    await expect(diffHeader).toBeVisible()
 
     // Close both panels
     await explorerButton.click()

@@ -14,6 +14,7 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
   const [ptyId, setPtyId] = useState<string | null>(null)
   const { addError } = useErrorStore()
 
@@ -59,12 +60,16 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
     terminal.open(containerRef.current)
     fitAddon.fit()
 
-    // Intercept keyboard shortcuts - return false to let them bubble to the app
+    // Intercept keyboard shortcuts - dispatch custom event for Layout to handle
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       // Let Cmd/Ctrl + 1/2/3/4/5/6/7 pass through to the app
       if (e.metaKey || e.ctrlKey) {
         if (['1', '2', '3', '4', '5', '6', '7'].includes(e.key)) {
-          return false // Don't handle in terminal, let it bubble
+          // Dispatch custom event for Layout to handle (xterm may block normal bubbling)
+          window.dispatchEvent(new CustomEvent('app:toggle-panel', {
+            detail: { key: e.key }
+          }))
+          return false // Don't handle in terminal
         }
       }
       return true // Handle normally in terminal
@@ -95,7 +100,7 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
         })
 
         // Store cleanup functions
-        terminal.onDispose = () => {
+        cleanupRef.current = () => {
           removeDataListener()
           removeExitListener()
         }
@@ -118,6 +123,7 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
 
     return () => {
       resizeObserver.disconnect()
+      cleanupRef.current?.()
       if (ptyId) {
         window.pty.kill(ptyId)
       }

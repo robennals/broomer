@@ -1,4 +1,4 @@
-import { useAgentStore, type AgentConfig } from '../store/agents'
+import { useAgentStore } from '../store/agents'
 
 interface NewSessionDialogProps {
   folderPath: string

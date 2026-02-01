@@ -19,7 +19,7 @@ interface ErrorStore {
 
 const generateId = () => `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-export const useErrorStore = create<ErrorStore>((set, get) => ({
+export const useErrorStore = create<ErrorStore>((set) => ({
   errors: [],
   hasUnread: false,
 

@@ -1,4 +1,5 @@
-import Editor, { loader } from '@monaco-editor/react'
+import { useRef, useEffect } from 'react'
+import Editor, { loader, Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { FileViewerPlugin, FileViewerComponentProps } from './types'
 import { getFileExtension } from './types'
@@ -107,8 +108,37 @@ const getLanguageFromPath = (filePath: string): string => {
   return languageMap[ext] || 'plaintext'
 }
 
-function MonacoViewerComponent({ filePath, content }: FileViewerComponentProps) {
+function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange }: FileViewerComponentProps) {
   const language = getLanguageFromPath(filePath)
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  const originalContentRef = useRef(content)
+
+  // Update original content when file changes
+  useEffect(() => {
+    originalContentRef.current = content
+    onDirtyChange?.(false, content)
+  }, [content, filePath])
+
+  const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
+    editorRef.current = editor
+
+    // Add Cmd/Ctrl+S save handler
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
+      const editorContent = editor.getValue()
+      if (onSave && editorContent !== originalContentRef.current) {
+        onSave(editorContent).then(() => {
+          originalContentRef.current = editorContent
+          onDirtyChange?.(false, editorContent)
+        })
+      }
+    })
+  }
+
+  const handleEditorChange = (value: string | undefined) => {
+    const newContent = value ?? ''
+    const isDirty = newContent !== originalContentRef.current
+    onDirtyChange?.(isDirty, newContent)
+  }
 
   return (
     <Editor
@@ -116,8 +146,10 @@ function MonacoViewerComponent({ filePath, content }: FileViewerComponentProps) 
       language={language}
       value={content}
       theme="vs-dark"
+      onMount={handleEditorDidMount}
+      onChange={handleEditorChange}
       options={{
-        readOnly: true,
+        readOnly: !onSave,
         minimap: { enabled: false },
         fontSize: 13,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',

@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { FileEntry, GitFileStatus } from '../../preload/index'
 
+type FileFilter = 'all' | 'changed'
+
 interface ExplorerProps {
   directory?: string
   onFileSelect?: (filePath: string) => void
   selectedFilePath?: string | null
+  gitStatus?: GitFileStatus[] // Git status passed from parent (refreshes on save)
 }
 
 interface TreeNode extends FileEntry {
@@ -12,11 +15,11 @@ interface TreeNode extends FileEntry {
   isExpanded?: boolean
 }
 
-export default function Explorer({ directory, onFileSelect, selectedFilePath }: ExplorerProps) {
+export default function Explorer({ directory, onFileSelect, selectedFilePath, gitStatus = [] }: ExplorerProps) {
   const [tree, setTree] = useState<TreeNode[]>([])
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
-  const [gitStatus, setGitStatus] = useState<GitFileStatus[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [filter, setFilter] = useState<FileFilter>('all')
 
   // Load directory contents
   const loadDirectory = useCallback(async (dirPath: string): Promise<TreeNode[]> => {
@@ -44,15 +47,6 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath }: 
       setIsLoading(false)
     })
   }, [directory, loadDirectory])
-
-  // Load git status
-  useEffect(() => {
-    if (!directory) {
-      setGitStatus([])
-      return
-    }
-    window.git.status(directory).then(setGitStatus)
-  }, [directory])
 
   // Toggle directory expansion
   const toggleExpand = async (node: TreeNode) => {
@@ -120,6 +114,21 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath }: 
     }
   }
 
+  // Check if a node or any of its children have changes
+  const hasChanges = (node: TreeNode): boolean => {
+    if (getFileStatus(node.path)) return true
+    if (node.children) {
+      return node.children.some(hasChanges)
+    }
+    // For unexpanded directories, check if any git status paths start with this directory
+    if (node.isDirectory && !node.children) {
+      const relativePath = directory ? node.path.replace(directory + '/', '') : node.path
+      return gitStatus.some(s => s.path.startsWith(relativePath + '/'))
+    }
+    return false
+  }
+
+
   // Render a tree node
   const renderNode = (node: TreeNode, depth: number = 0): JSX.Element => {
     const isExpanded = expandedPaths.has(node.path)
@@ -178,21 +187,62 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath }: 
     )
   }
 
+  // Filter the tree based on the current filter
+  const filterTree = (nodes: TreeNode[]): TreeNode[] => {
+    if (filter === 'all') return nodes
+    return nodes
+      .filter(node => hasChanges(node))
+      .map(node => {
+        if (node.children) {
+          return { ...node, children: filterTree(node.children) }
+        }
+        return node
+      })
+  }
+
+  const filteredTree = filterTree(tree)
+
   return (
     <div className="h-full flex flex-col">
-      <div className="p-3 border-b border-border">
+      <div className="p-3 border-b border-border flex items-center justify-between">
         <span className="text-sm font-medium text-text-primary">Explorer</span>
+        {/* Filter selector */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              filter === 'all'
+                ? 'bg-accent text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setFilter('changed')}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              filter === 'changed'
+                ? 'bg-accent text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            Changed
+            {gitStatus.length > 0 && (
+              <span className="ml-1 opacity-70">({gitStatus.length})</span>
+            )}
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-2 text-sm">
         <div className="text-text-secondary mb-2 px-2 truncate text-xs">
           {directory}
         </div>
-        {tree.length === 0 ? (
+        {filteredTree.length === 0 ? (
           <div className="text-center text-text-secondary text-sm py-4">
-            Empty directory
+            {filter === 'changed' ? 'No changes' : 'Empty directory'}
           </div>
         ) : (
-          tree.map((node) => renderNode(node))
+          filteredTree.map((node) => renderNode(node))
         )}
       </div>
     </div>

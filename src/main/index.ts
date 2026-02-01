@@ -184,6 +184,11 @@ ipcMain.handle('config:load', async () => {
 })
 
 ipcMain.handle('config:save', async (_event, config: { agents?: unknown[]; sessions: unknown[] }) => {
+  // Don't save config during E2E tests to avoid polluting real config
+  if (isE2ETest) {
+    return { success: true }
+  }
+
   try {
     if (!existsSync(CONFIG_DIR)) {
       mkdirSync(CONFIG_DIR, { recursive: true })
@@ -350,6 +355,23 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
   } catch (error) {
     throw error // Re-throw to send error to renderer
   }
+})
+
+ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    writeFileSync(filePath, content, 'utf-8')
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('fs:exists', async (_event, filePath: string) => {
+  return existsSync(filePath)
 })
 
 ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {

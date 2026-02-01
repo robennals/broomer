@@ -1,23 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { basename } from 'path-browserify'
 import { getViewersForFile, isTextContent } from './fileViewers'
 import type { FileViewerPlugin } from './fileViewers'
 
 export type FileViewerPosition = 'top' | 'left'
+export type ViewMode = 'latest' | 'diff'
+export type FileStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | null
 
 interface FileViewerProps {
   filePath: string | null
   position?: FileViewerPosition
   onPositionChange?: (position: FileViewerPosition) => void
   onClose?: () => void
+  fileStatus?: FileStatus // The git status of the file (null if unchanged)
+  directory?: string // For getting git diff
+  onSaveComplete?: () => void // Called after a successful save
 }
 
-export default function FileViewer({ filePath, position = 'top', onPositionChange, onClose }: FileViewerProps) {
+export default function FileViewer({ filePath, position = 'top', onPositionChange, onClose, fileStatus, directory, onSaveComplete }: FileViewerProps) {
+  // Only show diff for modified files (not added/deleted)
+  const canShowDiff = fileStatus === 'modified'
   const [content, setContent] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [availableViewers, setAvailableViewers] = useState<FileViewerPlugin[]>([])
   const [selectedViewerId, setSelectedViewerId] = useState<string | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
+  const [editedContent, setEditedContent] = useState<string>('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('latest')
+  const [diffContent, setDiffContent] = useState<string>('')
 
   useEffect(() => {
     if (!filePath) {
@@ -96,6 +108,67 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
     }
   }, [filePath])
 
+  // Load diff content when in diff mode
+  useEffect(() => {
+    if (!filePath || !directory || !canShowDiff || viewMode !== 'diff') {
+      setDiffContent('')
+      return
+    }
+
+    const loadDiff = async () => {
+      try {
+        // Convert absolute path to relative path for git diff
+        const relativePath = filePath.startsWith(directory + '/')
+          ? filePath.slice(directory.length + 1)
+          : filePath
+        const diff = await window.git.diff(directory, relativePath)
+        setDiffContent(diff)
+      } catch {
+        setDiffContent('Failed to load diff')
+      }
+    }
+
+    loadDiff()
+  }, [filePath, directory, canShowDiff, viewMode])
+
+  // Reset dirty state when file changes
+  useEffect(() => {
+    setIsDirty(false)
+    setViewMode('latest')
+  }, [filePath])
+
+  // Save handler (called by editor on Cmd+S)
+  const handleSave = useCallback(async (newContent: string) => {
+    if (!filePath) return
+    setIsSaving(true)
+    try {
+      const result = await window.fs.writeFile(filePath, newContent)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save file')
+      }
+      setContent(newContent)
+      setEditedContent(newContent)
+      setIsDirty(false)
+      onSaveComplete?.()
+    } finally {
+      setIsSaving(false)
+    }
+  }, [filePath, onSaveComplete])
+
+  // Save button handler
+  const handleSaveButton = useCallback(async () => {
+    if (!filePath || !isDirty || !editedContent) return
+    await handleSave(editedContent)
+  }, [filePath, isDirty, editedContent, handleSave])
+
+  // Dirty change handler - also tracks the current content for save button
+  const handleDirtyChange = useCallback((dirty: boolean, currentContent?: string) => {
+    setIsDirty(dirty)
+    if (currentContent !== undefined) {
+      setEditedContent(currentContent)
+    }
+  }, [])
+
   if (!filePath) {
     return (
       <div className="h-full flex items-center justify-center text-text-secondary text-sm">
@@ -138,19 +211,34 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
     <div className="h-full flex flex-col">
       <div className="flex-shrink-0 p-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-medium text-text-primary truncate">{fileName}</span>
+          <span className="text-sm font-medium text-text-primary truncate">
+            {fileName}
+          </span>
+          {isDirty && (
+            <button
+              onClick={handleSaveButton}
+              disabled={isSaving}
+              className="px-2 py-0.5 text-xs rounded bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-50"
+              title="Save (Cmd+S)"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          )}
           <span className="text-xs text-text-secondary truncate">{filePath}</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Viewer selector icons when multiple viewers are available */}
-          {availableViewers.length > 1 && (
+          {/* Viewer selector icons - includes Diff as a view mode for modified text files */}
+          {(availableViewers.length > 1 || canShowDiff) && (
             <div className="flex items-center gap-1 mr-2">
               {availableViewers.map(viewer => (
                 <button
                   key={viewer.id}
-                  onClick={() => setSelectedViewerId(viewer.id)}
+                  onClick={() => {
+                    setSelectedViewerId(viewer.id)
+                    setViewMode('latest')
+                  }}
                   className={`p-1.5 rounded transition-colors ${
-                    selectedViewerId === viewer.id
+                    selectedViewerId === viewer.id && viewMode === 'latest'
                       ? 'bg-accent text-white'
                       : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
                   }`}
@@ -163,6 +251,25 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
                   )}
                 </button>
               ))}
+              {/* Diff view option for modified text files */}
+              {canShowDiff && (
+                <button
+                  onClick={() => setViewMode('diff')}
+                  className={`p-1.5 rounded transition-colors ${
+                    viewMode === 'diff'
+                      ? 'bg-accent text-white'
+                      : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                  }`}
+                  title="Diff"
+                >
+                  {/* Git diff/compare icon */}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="18" r="3" />
+                    <circle cx="6" cy="6" r="3" />
+                    <path d="M6 21V9a9 9 0 0 0 9 9" />
+                  </svg>
+                </button>
+              )}
             </div>
           )}
 
@@ -244,8 +351,52 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        <ViewerComponent filePath={filePath} content={content} />
+        {viewMode === 'diff' ? (
+          <DiffViewer diff={diffContent} />
+        ) : (
+          <ViewerComponent
+            filePath={filePath}
+            content={content}
+            onSave={handleSave}
+            onDirtyChange={handleDirtyChange}
+          />
+        )}
       </div>
+    </div>
+  )
+}
+
+// Simple diff viewer component
+function DiffViewer({ diff }: { diff: string }) {
+  if (!diff) {
+    return (
+      <div className="h-full flex items-center justify-center text-text-secondary text-sm">
+        No changes
+      </div>
+    )
+  }
+
+  const lines = diff.split('\n')
+
+  return (
+    <div className="h-full overflow-auto p-4 font-mono text-sm">
+      {lines.map((line, i) => {
+        let className = 'text-text-secondary'
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          className = 'text-green-400 bg-green-400/10'
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+          className = 'text-red-400 bg-red-400/10'
+        } else if (line.startsWith('@@')) {
+          className = 'text-cyan-400'
+        } else if (line.startsWith('diff') || line.startsWith('index')) {
+          className = 'text-text-secondary opacity-60'
+        }
+        return (
+          <div key={i} className={`${className} whitespace-pre`}>
+            {line}
+          </div>
+        )
+      })}
     </div>
   )
 }
