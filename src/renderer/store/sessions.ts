@@ -3,6 +3,7 @@ import { basename } from 'path-browserify'
 
 export type SessionStatus = 'working' | 'waiting' | 'idle' | 'error'
 export type FileViewerPosition = 'top' | 'left'
+export type WaitingType = 'tool' | 'question' | 'prompt' | null
 
 export interface LayoutSizes {
   explorerWidth: number
@@ -30,6 +31,11 @@ export interface Session {
   fileViewerPosition: FileViewerPosition
   layoutSizes: LayoutSizes
   explorerFilter: ExplorerFilter
+  // Agent monitoring state (runtime only, not persisted)
+  lastMessage: string | null
+  lastMessageTime: number | null
+  waitingType: WaitingType
+  isUnread: boolean
 }
 
 // Default layout sizes
@@ -67,6 +73,9 @@ interface SessionStore {
   setFileViewerPosition: (id: string, position: FileViewerPosition) => void
   updateLayoutSize: (id: string, key: keyof LayoutSizes, value: number) => void
   setExplorerFilter: (id: string, filter: ExplorerFilter) => void
+  // Agent monitoring actions
+  updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string; waitingType?: WaitingType }) => void
+  markSessionRead: (id: string) => void
 }
 
 const generateId = () => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -130,6 +139,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           fileViewerPosition: sessionData.fileViewerPosition ?? 'top',
           layoutSizes: sessionData.layoutSizes ?? { ...DEFAULT_LAYOUT_SIZES },
           explorerFilter: sessionData.explorerFilter ?? 'all',
+          // Runtime monitoring state
+          lastMessage: null,
+          lastMessageTime: null,
+          waitingType: null,
+          isUnread: false,
         })
       }
 
@@ -171,6 +185,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       fileViewerPosition: 'top',
       layoutSizes: { ...DEFAULT_LAYOUT_SIZES },
       explorerFilter: 'all',
+      // Runtime monitoring state
+      lastMessage: null,
+      lastMessageTime: null,
+      waitingType: null,
+      isUnread: false,
     }
 
     const { sessions, showSidebar, sidebarWidth } = get()
@@ -305,5 +324,39 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     )
     set({ sessions: updatedSessions })
     debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+  },
+
+  updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string; waitingType?: WaitingType }) => {
+    const { sessions, activeSessionId } = get()
+    const updatedSessions = sessions.map((s) => {
+      if (s.id !== id) return s
+      const changes: Partial<Session> = {}
+      if (update.status !== undefined) {
+        changes.status = update.status
+      }
+      if (update.lastMessage !== undefined) {
+        changes.lastMessage = update.lastMessage
+        changes.lastMessageTime = Date.now()
+      }
+      if (update.waitingType !== undefined) {
+        changes.waitingType = update.waitingType
+      }
+      // Mark as unread if status changes to waiting and this isn't the active session
+      if (update.status === 'waiting' && id !== activeSessionId) {
+        changes.isUnread = true
+      }
+      return { ...s, ...changes }
+    })
+    set({ sessions: updatedSessions })
+    // Don't persist runtime monitoring state
+  },
+
+  markSessionRead: (id: string) => {
+    const { sessions } = get()
+    const updatedSessions = sessions.map((s) =>
+      s.id === id ? { ...s, isUnread: false } : s
+    )
+    set({ sessions: updatedSessions })
+    // Don't persist runtime monitoring state
   },
 }))

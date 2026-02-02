@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { homedir } from 'os'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher } from 'fs'
 import * as pty from 'node-pty'
 import simpleGit from 'simple-git'
 
@@ -19,6 +19,8 @@ const E2E_MOCK_SHELL = process.env.E2E_MOCK_SHELL
 
 // PTY instances map
 const ptyProcesses = new Map<string, pty.IPty>()
+// File watchers map
+const fileWatchers = new Map<string, FSWatcher>()
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -47,11 +49,15 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Kill all PTY processes when window is closing
+  // Kill all PTY processes and file watchers when window is closing
   mainWindow.on('close', () => {
     for (const [id, ptyProcess] of ptyProcesses) {
       ptyProcess.kill()
       ptyProcesses.delete(id)
+    }
+    for (const [id, watcher] of fileWatchers) {
+      watcher.close()
+      fileWatchers.delete(id)
     }
   })
 }
@@ -430,6 +436,53 @@ ipcMain.handle('dialog:openFolder', async () => {
   return result.filePaths[0]
 })
 
+// File watching IPC handlers
+ipcMain.handle('fs:watch', async (_event, id: string, dirPath: string) => {
+  // Don't watch in E2E test mode
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  // Stop existing watcher for this id if any
+  const existingWatcher = fileWatchers.get(id)
+  if (existingWatcher) {
+    existingWatcher.close()
+  }
+
+  try {
+    // Use recursive watching to catch changes in subdirectories
+    const watcher = watch(dirPath, { recursive: true }, (eventType, filename) => {
+      // Skip .git directory changes
+      if (filename && filename.startsWith('.git')) return
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(`fs:change:${id}`, { eventType, filename })
+      }
+    })
+
+    fileWatchers.set(id, watcher)
+
+    watcher.on('error', (error) => {
+      console.error('File watcher error:', error)
+      fileWatchers.delete(id)
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to start file watcher:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('fs:unwatch', async (_event, id: string) => {
+  const watcher = fileWatchers.get(id)
+  if (watcher) {
+    watcher.close()
+    fileWatchers.delete(id)
+  }
+  return { success: true }
+})
+
 // App lifecycle
 app.whenReady().then(() => {
   createWindow()
@@ -446,6 +499,11 @@ app.on('window-all-closed', () => {
   for (const [id, ptyProcess] of ptyProcesses) {
     ptyProcess.kill()
     ptyProcesses.delete(id)
+  }
+  // Close all file watchers
+  for (const [id, watcher] of fileWatchers) {
+    watcher.close()
+    fileWatchers.delete(id)
   }
 
   if (process.platform !== 'darwin') {

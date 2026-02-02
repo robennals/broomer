@@ -30,6 +30,9 @@ export type FsApi = {
   writeFile: (path: string, content: string) => Promise<{ success: boolean; error?: string }>
   readFileBase64: (path: string) => Promise<string>
   exists: (path: string) => Promise<boolean>
+  watch: (id: string, path: string) => Promise<{ success: boolean; error?: string }>
+  unwatch: (id: string) => Promise<{ success: boolean }>
+  onChange: (id: string, callback: (event: { eventType: string; filename: string | null }) => void) => () => void
 }
 
 export type GitApi = {
@@ -108,6 +111,13 @@ const fsApi: FsApi = {
   writeFile: (path, content) => ipcRenderer.invoke('fs:writeFile', path, content),
   readFileBase64: (path) => ipcRenderer.invoke('fs:readFileBase64', path),
   exists: (path) => ipcRenderer.invoke('fs:exists', path),
+  watch: (id, path) => ipcRenderer.invoke('fs:watch', id, path),
+  unwatch: (id) => ipcRenderer.invoke('fs:unwatch', id),
+  onChange: (id, callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { eventType: string; filename: string | null }) => callback(data)
+    ipcRenderer.on(`fs:change:${id}`, handler)
+    return () => ipcRenderer.removeListener(`fs:change:${id}`, handler)
+  },
 }
 
 const gitApi: GitApi = {

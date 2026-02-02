@@ -49,6 +49,32 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
     }
   }, [])
 
+  // Refresh the explorer tree while preserving expanded directories
+  const refreshTree = useCallback(async () => {
+    if (!directory) return
+
+    // Reload root
+    const newEntries = await loadDirectory(directory)
+
+    // Recursively reload children for expanded directories
+    const reloadChildren = async (nodes: TreeNode[]): Promise<TreeNode[]> => {
+      const result: TreeNode[] = []
+      for (const node of nodes) {
+        if (node.isDirectory && allModeExpandedPaths.has(node.path)) {
+          const children = await loadDirectory(node.path)
+          const loadedChildren = await reloadChildren(children)
+          result.push({ ...node, children: loadedChildren })
+        } else {
+          result.push(node)
+        }
+      }
+      return result
+    }
+
+    const refreshedTree = await reloadChildren(newEntries)
+    setTree(refreshedTree)
+  }, [directory, loadDirectory, allModeExpandedPaths])
+
   // Load root directory
   useEffect(() => {
     if (!directory) {
@@ -62,6 +88,36 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
       setIsLoading(false)
     })
   }, [directory, loadDirectory])
+
+  // Watch for file system changes
+  useEffect(() => {
+    if (!directory) return
+
+    const watcherId = `explorer-${directory}`
+
+    // Debounce refresh to avoid rapid successive updates
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null
+    const debouncedRefresh = () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout)
+      refreshTimeout = setTimeout(() => {
+        refreshTree()
+      }, 500)
+    }
+
+    // Start watching
+    window.fs.watch(watcherId, directory)
+
+    // Listen for changes
+    const removeListener = window.fs.onChange(watcherId, () => {
+      debouncedRefresh()
+    })
+
+    return () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout)
+      removeListener()
+      window.fs.unwatch(watcherId)
+    }
+  }, [directory, refreshTree])
 
   // Auto-expand directories with changes in "changed" mode
   useEffect(() => {

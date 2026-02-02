@@ -44,6 +44,7 @@ function App() {
     setExplorerFilter,
     setFileViewerPosition,
     updateLayoutSize,
+    markSessionRead,
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
@@ -113,6 +114,13 @@ function App() {
     loadSessions()
     loadAgents()
   }, [loadSessions, loadAgents])
+
+  // Mark session as read when it becomes active
+  useEffect(() => {
+    if (activeSessionId) {
+      markSessionRead(activeSessionId)
+    }
+  }, [activeSessionId, markSessionRead])
 
   // Poll for branch changes every 2 seconds
   useEffect(() => {
@@ -208,6 +216,8 @@ function App() {
                   sessionId={session.id}
                   cwd={session.directory}
                   command={getAgentCommand(session)}
+                  isAgentTerminal={!!getAgentCommand(session)}
+                  isActive={session.id === activeSessionId}
                 />
               </div>
             ))}
@@ -228,7 +238,7 @@ function App() {
                 key={`user-${session.id}`}
                 className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
               >
-                <Terminal sessionId={`user-${session.id}`} cwd={session.directory} />
+                <Terminal sessionId={`user-${session.id}`} cwd={session.directory} isActive={session.id === activeSessionId} />
               </div>
             ))}
           </div>

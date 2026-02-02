@@ -186,25 +186,25 @@ export default function Layout({
     }
   }, [handleToggleByKey])
 
-  // Divider component - wide hit area, thin visual line
+  // Divider component - wide hit area, visible line
   const Divider = ({ type, direction }: { type: DividerType; direction: 'horizontal' | 'vertical' }) => (
     <div
       onMouseDown={handleMouseDown(type)}
       className={`flex-shrink-0 group relative ${
         direction === 'vertical'
-          ? 'w-0 cursor-col-resize'
-          : 'h-0 cursor-row-resize'
+          ? 'w-px cursor-col-resize'
+          : 'h-px cursor-row-resize'
       }`}
     >
       {/* Invisible wide hit area */}
-      <div className={`absolute ${
+      <div className={`absolute z-10 ${
         direction === 'vertical'
           ? 'w-4 h-full -left-2 top-0'
           : 'h-4 w-full -top-2 left-0'
       }`} />
-      {/* Thin visible line */}
+      {/* Visible line - brighter on hover/drag */}
       <div className={`absolute transition-colors ${
-        draggingDivider === type ? 'bg-accent' : 'bg-border group-hover:bg-accent/50'
+        draggingDivider === type ? 'bg-accent' : 'bg-[#4a4a4a] group-hover:bg-accent/70'
       } ${direction === 'vertical' ? 'w-px h-full left-0 top-0' : 'h-px w-full top-0 left-0'}`} />
     </div>
   )
@@ -376,10 +376,10 @@ export default function Layout({
 
                   {/* Terminals container - right side */}
                   {(showAgentTerminal || showUserTerminal) && (
-                    <div className="flex-1 flex flex-col min-w-0">
+                    <div className={`flex-1 flex flex-col min-w-0 ${fileViewer ? 'border-l border-[#4a4a4a]' : ''}`}>
                       {/* Agent terminal */}
                       {showAgentTerminal && (
-                        <div className={`flex-1 min-w-0 bg-bg-primary ${showUserTerminal ? 'border-b border-border' : ''}`}>
+                        <div className={`flex-1 min-w-0 bg-bg-primary ${showUserTerminal ? 'border-b border-[#4a4a4a]' : ''}`}>
                           {agentTerminal}
                         </div>
                       )}
@@ -436,7 +436,7 @@ export default function Layout({
 
                   {/* Agent terminal */}
                   {showAgentTerminal && (
-                    <div className={`flex-1 min-w-0 bg-bg-primary ${showUserTerminal ? 'border-b border-border' : ''}`}>
+                    <div className={`flex-1 min-w-0 bg-bg-primary ${fileViewer ? 'border-t border-[#4a4a4a]' : ''} ${showUserTerminal ? 'border-b border-[#4a4a4a]' : ''}`}>
                       {agentTerminal}
                     </div>
                   )}
@@ -449,7 +449,7 @@ export default function Layout({
                   {/* User terminal */}
                   {showUserTerminal && (
                     <div
-                      className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : 'flex-1'}`}
+                      className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : ''} ${!showAgentTerminal ? 'flex-1' : ''} ${!showAgentTerminal && fileViewer ? 'border-t border-[#4a4a4a]' : ''}`}
                       style={showAgentTerminal ? { height: layoutSizes.userTerminalHeight } : undefined}
                     >
                       {userTerminal}

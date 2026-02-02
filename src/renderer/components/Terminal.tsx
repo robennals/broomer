@@ -1,25 +1,72 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { useErrorStore } from '../store/errors'
+import { useSessionStore } from '../store/sessions'
+import { ClaudeOutputParser } from '../utils/claudeOutputParser'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
   sessionId?: string
   cwd: string
   command?: string
+  isAgentTerminal?: boolean
+  isActive?: boolean
 }
 
-export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
+export default function Terminal({ sessionId, cwd, command, isAgentTerminal = false, isActive = false }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
+  const parserRef = useRef<ClaudeOutputParser | null>(null)
+  const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [ptyId, setPtyId] = useState<string | null>(null)
   const { addError } = useErrorStore()
+  const updateAgentMonitor = useSessionStore((state) => state.updateAgentMonitor)
+
+  // Use ref for updateAgentMonitor to avoid effect re-runs
+  const updateAgentMonitorRef = useRef(updateAgentMonitor)
+  updateAgentMonitorRef.current = updateAgentMonitor
+
+  // Use ref for sessionId to avoid effect re-runs
+  const sessionIdRef = useRef(sessionId)
+  sessionIdRef.current = sessionId
+
+  // Debounced update to avoid flicker - collects updates over 300ms
+  const pendingUpdateRef = useRef<{ status?: 'working' | 'waiting' | 'idle' | 'error'; lastMessage?: string; waitingType?: 'tool' | 'question' | 'prompt' | null } | null>(null)
+
+  // Stable flush function using refs
+  const flushUpdate = useCallback(() => {
+    if (pendingUpdateRef.current && sessionIdRef.current) {
+      updateAgentMonitorRef.current(sessionIdRef.current, pendingUpdateRef.current)
+      pendingUpdateRef.current = null
+    }
+  }, [])
+
+  // Stable schedule function
+  const scheduleUpdate = useCallback((update: { status?: 'working' | 'waiting' | 'idle' | 'error'; lastMessage?: string; waitingType?: 'tool' | 'question' | 'prompt' | null }) => {
+    // Merge with pending update
+    pendingUpdateRef.current = {
+      ...pendingUpdateRef.current,
+      ...update,
+    }
+
+    // Clear existing timeout and schedule new one
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current)
+    }
+    updateTimeoutRef.current = setTimeout(flushUpdate, 300)
+  }, [flushUpdate])
 
   useEffect(() => {
     if (!containerRef.current || !sessionId) return
+
+    // Create parser for agent terminals
+    if (isAgentTerminal) {
+      parserRef.current = new ClaudeOutputParser()
+    }
 
     // Create terminal
     const terminal = new XTerm({
@@ -92,6 +139,40 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
         // Connect PTY output to terminal
         const removeDataListener = window.pty.onData(id, (data) => {
           terminal.write(data)
+
+          // Parse output for agent terminals
+          if (isAgentTerminal && parserRef.current) {
+            const result = parserRef.current.processData(data)
+
+            // Clear idle timeout since we got data
+            if (idleTimeoutRef.current) {
+              clearTimeout(idleTimeoutRef.current)
+            }
+
+            // Schedule update if we detected changes
+            // Only include fields that have actual values to avoid overwriting good data with undefined
+            if (result.status || result.message) {
+              const update: { status?: 'working' | 'waiting' | 'idle' | 'error'; lastMessage?: string; waitingType?: 'tool' | 'question' | 'prompt' | null } = {}
+              if (result.status) {
+                update.status = result.status
+              }
+              if (result.message) {
+                update.lastMessage = result.message
+              }
+              if (result.waitingType !== undefined) {
+                update.waitingType = result.waitingType
+              }
+              scheduleUpdate(update)
+            }
+
+            // Set idle timeout - if no data for 2 seconds and not waiting, might be idle
+            idleTimeoutRef.current = setTimeout(() => {
+              const idleResult = parserRef.current?.checkIdle()
+              if (idleResult && idleResult.status === 'idle') {
+                scheduleUpdate({ status: 'idle', waitingType: null })
+              }
+            }, 2000)
+          }
         })
 
         // Handle PTY exit
@@ -112,10 +193,16 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
         terminal.write(`\x1b[33m${err.message || err}\x1b[0m\r\n`)
       })
 
-    // Handle resize
-    const resizeObserver = new ResizeObserver(() => {
+    // Handle resize - but don't resize when terminal is hidden (would send 0x0 to PTY)
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      // Skip resize if container has no size (hidden)
+      if (!entry || entry.contentRect.width === 0 || entry.contentRect.height === 0) {
+        return
+      }
       fitAddon.fit()
-      if (id) {
+      // Only resize PTY if we have valid dimensions
+      if (id && terminal.cols > 0 && terminal.rows > 0) {
         window.pty.resize(id, terminal.cols, terminal.rows)
       }
     })
@@ -128,8 +215,17 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
         window.pty.kill(ptyId)
       }
       terminal.dispose()
+      // Clean up parser and timeouts
+      parserRef.current?.reset()
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current)
+      }
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current)
+      }
     }
-  }, [sessionId, cwd, command])
+    // Note: scheduleUpdate is stable (uses refs internally) so not needed in deps
+  }, [sessionId, cwd, command, isAgentTerminal, addError])
 
   // Handle window resize
   useEffect(() => {
@@ -143,6 +239,17 @@ export default function Terminal({ sessionId, cwd, command }: TerminalProps) {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [ptyId])
+
+  // Scroll to bottom when terminal becomes active
+  useEffect(() => {
+    if (isActive && terminalRef.current) {
+      // Small delay to ensure terminal is visible and rendered
+      const timeout = setTimeout(() => {
+        terminalRef.current?.scrollToBottom()
+      }, 50)
+      return () => clearTimeout(timeout)
+    }
+  }, [isActive])
 
   if (!sessionId) {
     return (
