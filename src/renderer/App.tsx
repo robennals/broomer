@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import type { GitFileStatus } from '../preload/index'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
@@ -7,9 +7,12 @@ import Explorer from './components/Explorer'
 import FileViewer from './components/FileViewer'
 import AgentSettings from './components/AgentSettings'
 import NewSessionDialog from './components/NewSessionDialog'
+import PanelPicker from './components/PanelPicker'
 import { useSessionStore, type Session, type SessionStatus, type LayoutSizes } from './store/sessions'
 import { useAgentStore } from './store/agents'
 import { useErrorStore } from './store/errors'
+import { PanelProvider, PANEL_IDS } from './panels'
+import { terminalBufferRegistry } from './utils/terminalBufferRegistry'
 
 // Re-export types for backwards compatibility
 export type { Session, SessionStatus }
@@ -22,24 +25,23 @@ const DEFAULT_LAYOUT_SIZES: LayoutSizes = {
   diffPanelWidth: 320,
 }
 
-function App() {
+function AppContent() {
   const {
     sessions,
     activeSessionId,
     isLoading,
-    showSidebar,
     sidebarWidth,
+    toolbarPanels,
+    globalPanelVisibility,
     loadSessions,
     addSession,
     removeSession,
     setActiveSession,
     refreshAllBranches,
-    toggleSidebar,
+    togglePanel,
+    toggleGlobalPanel,
     setSidebarWidth,
-    toggleAgentTerminal,
-    toggleUserTerminal,
-    toggleExplorer,
-    toggleFileViewer,
+    setToolbarPanels,
     selectFile,
     setExplorerFilter,
     setFileViewerPosition,
@@ -50,11 +52,11 @@ function App() {
   const { agents, loadAgents } = useAgentStore()
   const { addError } = useErrorStore()
 
-  const [showSettings, setShowSettings] = useState(false)
   const [pendingFolderPath, setPendingFolderPath] = useState<string | null>(null)
   const [gitStatusBySession, setGitStatusBySession] = useState<Record<string, GitFileStatus[]>>({})
   const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
   const [openFileInDiffMode, setOpenFileInDiffMode] = useState(false)
+  const [showPanelPicker, setShowPanelPicker] = useState(false)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
   const activeDirectoryExists = activeSession ? (directoryExists[activeSession.id] ?? true) : true
@@ -133,6 +135,40 @@ function App() {
     return () => clearInterval(interval)
   }, [sessions.length, refreshAllBranches])
 
+  // Keyboard shortcut to copy terminal content + summary (Cmd+Shift+C)
+  useEffect(() => {
+    const handleCopyTerminal = async (e: KeyboardEvent) => {
+      // Cmd+Shift+C (Mac) or Ctrl+Shift+C (other)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'c') {
+        if (!activeSession) return
+        e.preventDefault()
+
+        // Get terminal buffer (last 200 lines to keep it manageable)
+        const buffer = terminalBufferRegistry.getLastLines(activeSession.id, 200)
+
+        // Build the copy content with summary
+        let content = '=== Agent Session Debug Info ===\n\n'
+        content += `Session: ${activeSession.name}\n`
+        content += `Directory: ${activeSession.directory}\n`
+        content += `Status: ${activeSession.status}\n`
+        content += `Last Message: ${activeSession.lastMessage || '(none)'}\n`
+        content += `Waiting Type: ${activeSession.waitingType || '(none)'}\n`
+        content += '\n=== Terminal Output (last 200 lines) ===\n\n'
+        content += buffer || '(no content)'
+
+        try {
+          await navigator.clipboard.writeText(content)
+          // Could show a toast here, but keeping it simple
+        } catch (err) {
+          console.error('Failed to copy to clipboard:', err)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleCopyTerminal)
+    return () => window.removeEventListener('keydown', handleCopyTerminal)
+  }, [activeSession])
+
   const handleNewSession = async () => {
     const folderPath = await window.dialog.openFolder()
     if (folderPath) {
@@ -155,11 +191,12 @@ function App() {
     setPendingFolderPath(null)
   }
 
-  const getAgentCommand = (session: Session) => {
+  // Memoize getAgentCommand to ensure stable values
+  const getAgentCommand = useCallback((session: Session) => {
     if (!session.agentId) return undefined
     const agent = agents.find((a) => a.id === session.agentId)
     return agent?.command
-  }
+  }, [agents])
 
   const handleLayoutSizeChange = (key: keyof LayoutSizes, value: number) => {
     if (activeSessionId) {
@@ -173,6 +210,121 @@ function App() {
     }
   }
 
+  const handleTogglePanel = useCallback((panelId: string) => {
+    if (activeSessionId) {
+      togglePanel(activeSessionId, panelId)
+    }
+  }, [activeSessionId, togglePanel])
+
+  const handleToggleFileViewer = useCallback(() => {
+    if (activeSessionId) {
+      togglePanel(activeSessionId, PANEL_IDS.FILE_VIEWER)
+    }
+  }, [activeSessionId, togglePanel])
+
+  // Memoize terminal panels separately to ensure stability
+  // Only depends on sessions and agents (for command), not on activeSessionId
+  const agentTerminalPanel = useMemo(() => (
+    <div className="h-full w-full relative">
+      {sessions.map((session) => (
+        <div
+          key={session.id}
+          className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
+        >
+          <Terminal
+            sessionId={session.id}
+            cwd={session.directory}
+            command={getAgentCommand(session)}
+            isAgentTerminal={!!getAgentCommand(session)}
+            isActive={session.id === activeSessionId}
+          />
+        </div>
+      ))}
+      {sessions.length === 0 && (
+        <div className="h-full w-full flex items-center justify-center text-text-secondary">
+          <div className="text-center">
+            <p>No sessions yet.</p>
+            <p className="text-sm mt-2">Click "+ New Session" to add a git repository.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  ), [sessions, activeSessionId, getAgentCommand])
+
+  const userTerminalPanel = useMemo(() => (
+    <div className="h-full w-full relative">
+      {sessions.map((session) => (
+        <div
+          key={`user-${session.id}`}
+          className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
+        >
+          <Terminal
+            sessionId={`user-${session.id}`}
+            cwd={session.directory}
+            isActive={session.id === activeSessionId}
+          />
+        </div>
+      ))}
+    </div>
+  ), [sessions, activeSessionId])
+
+  // Build panels map - terminals use stable memoized components
+  const panelsMap = useMemo(() => ({
+    [PANEL_IDS.SIDEBAR]: (
+      <SessionList
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={setActiveSession}
+        onNewSession={handleNewSession}
+        onDeleteSession={removeSession}
+      />
+    ),
+    [PANEL_IDS.AGENT_TERMINAL]: agentTerminalPanel,
+    [PANEL_IDS.USER_TERMINAL]: userTerminalPanel,
+    [PANEL_IDS.EXPLORER]: activeSession?.showExplorer ? (
+      <Explorer
+        directory={activeSession?.directory}
+        onFileSelect={(filePath, openInDiffMode) => {
+          if (activeSessionId) {
+            setOpenFileInDiffMode(openInDiffMode)
+            selectFile(activeSessionId, filePath)
+          }
+        }}
+        selectedFilePath={activeSession?.selectedFilePath}
+        gitStatus={activeSessionGitStatus}
+        filter={activeSession?.explorerFilter ?? 'all'}
+        onFilterChange={(filter) => activeSessionId && setExplorerFilter(activeSessionId, filter)}
+      />
+    ) : null,
+    [PANEL_IDS.FILE_VIEWER]: activeSession?.showFileViewer ? (
+      <FileViewer
+        filePath={activeSession?.selectedFilePath ?? null}
+        position={activeSession?.fileViewerPosition ?? 'top'}
+        onPositionChange={handleFileViewerPositionChange}
+        onClose={handleToggleFileViewer}
+        fileStatus={selectedFileStatus}
+        directory={activeSession?.directory}
+        onSaveComplete={fetchGitStatus}
+        initialViewMode={openFileInDiffMode ? 'diff' : 'latest'}
+      />
+    ) : null,
+    [PANEL_IDS.SETTINGS]: globalPanelVisibility[PANEL_IDS.SETTINGS] ? (
+      <AgentSettings onClose={() => toggleGlobalPanel(PANEL_IDS.SETTINGS)} />
+    ) : null,
+  }), [
+    sessions,
+    activeSessionId,
+    activeSession,
+    activeSessionGitStatus,
+    selectedFileStatus,
+    openFileInDiffMode,
+    globalPanelVisibility,
+    fetchGitStatus,
+    agentTerminalPanel,
+    userTerminalPanel,
+    handleToggleFileViewer,
+  ])
+
   if (isLoading) {
     return (
       <div className="h-screen w-screen bg-bg-primary flex items-center justify-center">
@@ -184,103 +336,18 @@ function App() {
   return (
     <>
       <Layout
-        showSidebar={showSidebar}
-        showExplorer={activeSession?.showExplorer ?? false}
-        showFileViewer={activeSession?.showFileViewer ?? false}
-        showAgentTerminal={activeSession?.showAgentTerminal ?? true}
-        showUserTerminal={activeSession?.showUserTerminal ?? false}
-        showSettings={showSettings}
+        panels={panelsMap}
+        panelVisibility={activeSession?.panelVisibility ?? {}}
+        globalPanelVisibility={globalPanelVisibility}
         fileViewerPosition={activeSession?.fileViewerPosition ?? 'top'}
         sidebarWidth={sidebarWidth}
         layoutSizes={activeSession?.layoutSizes ?? DEFAULT_LAYOUT_SIZES}
         onSidebarWidthChange={setSidebarWidth}
         onLayoutSizeChange={handleLayoutSizeChange}
         errorMessage={activeSession && !activeDirectoryExists ? `Folder not found: ${activeSession.directory}` : null}
-        sidebar={
-          <SessionList
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={setActiveSession}
-            onNewSession={handleNewSession}
-            onDeleteSession={removeSession}
-          />
-        }
-        agentTerminal={
-          <div className="h-full w-full relative">
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
-              >
-                <Terminal
-                  sessionId={session.id}
-                  cwd={session.directory}
-                  command={getAgentCommand(session)}
-                  isAgentTerminal={!!getAgentCommand(session)}
-                  isActive={session.id === activeSessionId}
-                />
-              </div>
-            ))}
-            {sessions.length === 0 && (
-              <div className="h-full w-full flex items-center justify-center text-text-secondary">
-                <div className="text-center">
-                  <p>No sessions yet.</p>
-                  <p className="text-sm mt-2">Click "+ New Session" to add a git repository.</p>
-                </div>
-              </div>
-            )}
-          </div>
-        }
-        userTerminal={
-          <div className="h-full w-full relative">
-            {sessions.map((session) => (
-              <div
-                key={`user-${session.id}`}
-                className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
-              >
-                <Terminal sessionId={`user-${session.id}`} cwd={session.directory} isActive={session.id === activeSessionId} />
-              </div>
-            ))}
-          </div>
-        }
-        explorer={
-          activeSession?.showExplorer ? (
-            <Explorer
-              directory={activeSession?.directory}
-              onFileSelect={(filePath, openInDiffMode) => {
-                if (activeSessionId) {
-                  setOpenFileInDiffMode(openInDiffMode)
-                  selectFile(activeSessionId, filePath)
-                }
-              }}
-              selectedFilePath={activeSession?.selectedFilePath}
-              gitStatus={activeSessionGitStatus}
-              filter={activeSession?.explorerFilter ?? 'all'}
-              onFilterChange={(filter) => activeSessionId && setExplorerFilter(activeSessionId, filter)}
-            />
-          ) : null
-        }
-        fileViewer={
-          activeSession?.showFileViewer ? (
-            <FileViewer
-              filePath={activeSession?.selectedFilePath ?? null}
-              position={activeSession?.fileViewerPosition ?? 'top'}
-              onPositionChange={handleFileViewerPositionChange}
-              onClose={() => activeSessionId && toggleFileViewer(activeSessionId)}
-              fileStatus={selectedFileStatus}
-              directory={activeSession?.directory}
-              onSaveComplete={fetchGitStatus}
-              initialViewMode={openFileInDiffMode ? 'diff' : 'latest'}
-            />
-          ) : null
-        }
-        settingsPanel={showSettings ? <AgentSettings onClose={() => setShowSettings(false)} /> : null}
-        onToggleSidebar={toggleSidebar}
-        onToggleExplorer={() => activeSessionId && toggleExplorer(activeSessionId)}
-        onToggleFileViewer={() => activeSessionId && toggleFileViewer(activeSessionId)}
-        onToggleAgentTerminal={() => activeSessionId && toggleAgentTerminal(activeSessionId)}
-        onToggleUserTerminal={() => activeSessionId && toggleUserTerminal(activeSessionId)}
-        onToggleSettings={() => setShowSettings(!showSettings)}
+        onTogglePanel={handleTogglePanel}
+        onToggleGlobalPanel={toggleGlobalPanel}
+        onOpenPanelPicker={() => setShowPanelPicker(true)}
       />
 
       {/* New Session Dialog */}
@@ -291,7 +358,29 @@ function App() {
           onCancel={handleCancelNewSession}
         />
       )}
+
+      {/* Panel Picker */}
+      {showPanelPicker && (
+        <PanelPicker
+          toolbarPanels={toolbarPanels}
+          onToolbarPanelsChange={setToolbarPanels}
+          onClose={() => setShowPanelPicker(false)}
+        />
+      )}
     </>
+  )
+}
+
+function App() {
+  const { toolbarPanels, setToolbarPanels } = useSessionStore()
+
+  return (
+    <PanelProvider
+      toolbarPanels={toolbarPanels}
+      onToolbarPanelsChange={setToolbarPanels}
+    >
+      <AppContent />
+    </PanelProvider>
   )
 }
 

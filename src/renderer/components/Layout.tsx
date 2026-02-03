@@ -1,35 +1,29 @@
-import { ReactNode, useEffect, useState, useCallback, useRef } from 'react'
+import { ReactNode, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import ErrorIndicator from './ErrorIndicator'
 import type { LayoutSizes, FileViewerPosition } from '../store/sessions'
+import { usePanelContext, PANEL_IDS, MAX_SHORTCUT_PANELS } from '../panels'
+import type { PanelDefinition } from '../panels'
 
 // Detect if we're on Mac for keyboard shortcut display
 const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
 
 interface LayoutProps {
-  sidebar: ReactNode
-  agentTerminal: ReactNode
-  userTerminal: ReactNode
-  explorer: ReactNode | null
-  fileViewer: ReactNode | null
-  settingsPanel: ReactNode | null
-  showSidebar: boolean
-  showExplorer: boolean
-  showFileViewer: boolean
-  showAgentTerminal: boolean
-  showUserTerminal: boolean
-  showSettings: boolean
+  // Panel content
+  panels: Record<string, ReactNode>
+  // Visibility state
+  panelVisibility: Record<string, boolean>
+  globalPanelVisibility: Record<string, boolean>
+  // Layout
   fileViewerPosition: FileViewerPosition
   sidebarWidth: number
   layoutSizes: LayoutSizes
-  errorMessage?: string | null // Show this instead of panels if set
+  errorMessage?: string | null
+  // Callbacks
   onSidebarWidthChange: (width: number) => void
   onLayoutSizeChange: (key: keyof LayoutSizes, value: number) => void
-  onToggleSidebar: () => void
-  onToggleExplorer: () => void
-  onToggleFileViewer: () => void
-  onToggleAgentTerminal: () => void
-  onToggleUserTerminal: () => void
-  onToggleSettings: () => void
+  onTogglePanel: (panelId: string) => void
+  onToggleGlobalPanel: (panelId: string) => void
+  onOpenPanelPicker?: () => void
 }
 
 // Keyboard shortcut helper
@@ -41,34 +35,52 @@ const formatShortcut = (key: string) => {
 type DividerType = 'sidebar' | 'explorer' | 'fileViewer' | 'userTerminal' | null
 
 export default function Layout({
-  sidebar,
-  agentTerminal,
-  userTerminal,
-  explorer,
-  fileViewer,
-  settingsPanel,
-  showSidebar,
-  showExplorer,
-  showFileViewer,
-  showAgentTerminal,
-  showUserTerminal,
-  showSettings,
+  panels,
+  panelVisibility,
+  globalPanelVisibility,
   fileViewerPosition,
   sidebarWidth,
   layoutSizes,
   errorMessage,
   onSidebarWidthChange,
   onLayoutSizeChange,
-  onToggleSidebar,
-  onToggleExplorer,
-  onToggleFileViewer,
-  onToggleAgentTerminal,
-  onToggleUserTerminal,
-  onToggleSettings,
+  onTogglePanel,
+  onToggleGlobalPanel,
+  onOpenPanelPicker,
 }: LayoutProps) {
   const [draggingDivider, setDraggingDivider] = useState<DividerType>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const mainContentRef = useRef<HTMLDivElement>(null)
+  const { registry, toolbarPanels, getShortcutKey } = usePanelContext()
+
+  // Get visibility for a panel, considering global vs session state
+  const isPanelVisible = useCallback((panelId: string): boolean => {
+    const panel = registry.get(panelId)
+    if (!panel) return false
+    if (panel.isGlobal) {
+      return globalPanelVisibility[panelId] ?? panel.defaultVisible
+    }
+    return panelVisibility[panelId] ?? panel.defaultVisible
+  }, [registry, panelVisibility, globalPanelVisibility])
+
+  // Computed visibility states
+  const showSidebar = isPanelVisible(PANEL_IDS.SIDEBAR)
+  const showExplorer = isPanelVisible(PANEL_IDS.EXPLORER)
+  const showFileViewer = isPanelVisible(PANEL_IDS.FILE_VIEWER)
+  const showAgentTerminal = isPanelVisible(PANEL_IDS.AGENT_TERMINAL)
+  const showUserTerminal = isPanelVisible(PANEL_IDS.USER_TERMINAL)
+  const showSettings = isPanelVisible(PANEL_IDS.SETTINGS)
+
+  // Handle toggle for any panel
+  const handleToggle = useCallback((panelId: string) => {
+    const panel = registry.get(panelId)
+    if (!panel) return
+    if (panel.isGlobal) {
+      onToggleGlobalPanel(panelId)
+    } else {
+      onTogglePanel(panelId)
+    }
+  }, [registry, onTogglePanel, onToggleGlobalPanel])
 
   // Handle drag for resizing panels
   const handleMouseDown = useCallback((divider: DividerType) => (e: React.MouseEvent) => {
@@ -132,29 +144,14 @@ export default function Layout({
     }
   }, [draggingDivider, fileViewerPosition, sidebarWidth, showSidebar, onSidebarWidthChange, onLayoutSizeChange])
 
-  // Handle panel toggle by key
+  // Handle panel toggle by key (1-6 for toolbar panels)
   const handleToggleByKey = useCallback((key: string) => {
-    switch (key) {
-      case '1':
-        onToggleSidebar()
-        break
-      case '2':
-        onToggleExplorer()
-        break
-      case '3':
-        onToggleFileViewer()
-        break
-      case '4':
-        onToggleAgentTerminal()
-        break
-      case '5':
-        onToggleUserTerminal()
-        break
-      case '6':
-        onToggleSettings()
-        break
+    const index = parseInt(key, 10) - 1
+    if (index >= 0 && index < toolbarPanels.length && index < MAX_SHORTCUT_PANELS) {
+      const panelId = toolbarPanels[index]
+      handleToggle(panelId)
     }
-  }, [onToggleSidebar, onToggleExplorer, onToggleFileViewer, onToggleAgentTerminal, onToggleUserTerminal, onToggleSettings])
+  }, [toolbarPanels, handleToggle])
 
   // Keyboard shortcuts - use capture phase to intercept before terminal gets them
   useEffect(() => {
@@ -186,6 +183,21 @@ export default function Layout({
     }
   }, [handleToggleByKey])
 
+  // Get toolbar panels info with visibility status
+  const toolbarPanelInfo = useMemo(() => {
+    return toolbarPanels
+      .map(id => {
+        const panel = registry.get(id)
+        if (!panel) return null
+        return {
+          ...panel,
+          shortcutKey: getShortcutKey(id),
+          isVisible: isPanelVisible(id),
+        }
+      })
+      .filter((p): p is PanelDefinition & { shortcutKey: string | null; isVisible: boolean } => p !== null)
+  }, [registry, toolbarPanels, getShortcutKey, isPanelVisible])
+
   // Divider component - wide hit area, visible line
   const Divider = ({ type, direction }: { type: DividerType; direction: 'horizontal' | 'vertical' }) => (
     <div
@@ -209,6 +221,37 @@ export default function Layout({
     </div>
   )
 
+  // Render a toolbar button for a panel
+  const renderToolbarButton = (panel: PanelDefinition & { shortcutKey: string | null; isVisible: boolean }) => {
+    const isSettings = panel.id === PANEL_IDS.SETTINGS
+
+    return (
+      <button
+        key={panel.id}
+        onClick={() => handleToggle(panel.id)}
+        className={`${isSettings ? 'p-1.5' : 'px-3 py-1 text-xs'} rounded transition-colors ${
+          panel.isVisible
+            ? 'bg-accent text-white'
+            : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+        }`}
+        title={`${panel.name}${panel.shortcutKey ? ` (${formatShortcut(panel.shortcutKey)})` : ''}`}
+      >
+        {isSettings ? panel.icon : panel.name}
+      </button>
+    )
+  }
+
+  // Get panel content
+  const sidebar = panels[PANEL_IDS.SIDEBAR]
+  const explorer = panels[PANEL_IDS.EXPLORER]
+  const fileViewer = panels[PANEL_IDS.FILE_VIEWER]
+  const agentTerminal = panels[PANEL_IDS.AGENT_TERMINAL]
+  const userTerminal = panels[PANEL_IDS.USER_TERMINAL]
+  const settingsPanel = panels[PANEL_IDS.SETTINGS]
+
+  // Determine if we should show terminals (considering all visibility states)
+  const terminalsVisible = showAgentTerminal || showUserTerminal
+
   return (
     <div className="h-screen flex flex-col bg-bg-primary">
       {/* Title bar / toolbar - draggable region */}
@@ -223,86 +266,35 @@ export default function Layout({
           className="flex items-center gap-2"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          <button
-            onClick={onToggleSidebar}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              showSidebar
-                ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-            title={`Sessions (${formatShortcut('1')})`}
-          >
-            Sessions
-          </button>
-          <button
-            onClick={onToggleExplorer}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              showExplorer
-                ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-            title={`File Explorer (${formatShortcut('2')})`}
-          >
-            Explorer
-          </button>
-          <button
-            onClick={onToggleFileViewer}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              showFileViewer
-                ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-            title={`File Viewer (${formatShortcut('3')})`}
-          >
-            File
-          </button>
-          <button
-            onClick={onToggleAgentTerminal}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              showAgentTerminal
-                ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-            title={`Agent Terminal (${formatShortcut('4')})`}
-          >
-            Agent
-          </button>
-          <button
-            onClick={onToggleUserTerminal}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              showUserTerminal
-                ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-            title={`User Terminal (${formatShortcut('5')})`}
-          >
-            Terminal
-          </button>
+          {/* Render toolbar buttons from toolbarPanels */}
+          {toolbarPanelInfo.map(panel => renderToolbarButton(panel))}
+
           <ErrorIndicator />
-          <button
-            onClick={onToggleSettings}
-            className={`p-1.5 rounded transition-colors ${
-              showSettings
-                ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-            title={`Settings (${formatShortcut('6')})`}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+
+          {/* Panel picker overflow menu button */}
+          {onOpenPanelPicker && (
+            <button
+              onClick={onOpenPanelPicker}
+              className="p-1.5 rounded transition-colors bg-bg-tertiary text-text-secondary hover:text-text-primary"
+              title="Configure panels"
             >
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="19" cy="12" r="1" />
+                <circle cx="5" cy="12" r="1" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -335,7 +327,7 @@ export default function Layout({
             ) : (
               <>
                 {/* Left side panels (Explorer) */}
-                {explorer && (
+                {showExplorer && explorer && (
                   <>
                     <div
                       className="flex-shrink-0 bg-bg-secondary overflow-y-auto"
@@ -348,128 +340,118 @@ export default function Layout({
                 )}
 
                 {/* Center: file viewer + terminals or settings */}
-                <div ref={containerRef} className={`flex-1 min-w-0 ${fileViewerPosition === 'left' && fileViewer ? 'flex' : 'flex flex-col'}`}>
-                  {settingsPanel ? (
-                <div className="flex-1 min-w-0 bg-bg-secondary overflow-y-auto">
-                  {settingsPanel}
-                </div>
-              ) : fileViewerPosition === 'left' ? (
-                /* Left position: file viewer on left, terminals on right */
-                <>
-                  {/* File viewer - left side */}
-                  {fileViewer && (
-                    <div
-                      className="flex-shrink-0 bg-bg-secondary min-h-0"
-                      style={{
-                        width: (showAgentTerminal || showUserTerminal) ? layoutSizes.fileViewerSize : undefined,
-                        flex: (showAgentTerminal || showUserTerminal) ? undefined : 1,
-                      }}
-                    >
-                      {fileViewer}
+                <div ref={containerRef} className={`flex-1 min-w-0 ${fileViewerPosition === 'left' && showFileViewer && fileViewer ? 'flex' : 'flex flex-col'}`}>
+                  {showSettings && settingsPanel ? (
+                    <div className="flex-1 min-w-0 bg-bg-secondary overflow-y-auto">
+                      {settingsPanel}
                     </div>
-                  )}
-
-                  {/* Draggable divider (vertical) */}
-                  {fileViewer && (showAgentTerminal || showUserTerminal) && (
-                    <Divider type="fileViewer" direction="vertical" />
-                  )}
-
-                  {/* Terminals container - right side */}
-                  {(showAgentTerminal || showUserTerminal) && (
-                    <div className={`flex-1 flex flex-col min-w-0 ${fileViewer ? 'border-l border-[#4a4a4a]' : ''}`}>
-                      {/* Agent terminal */}
-                      {showAgentTerminal && (
-                        <div className={`flex-1 min-w-0 bg-bg-primary ${showUserTerminal ? 'border-b border-[#4a4a4a]' : ''}`}>
-                          {agentTerminal}
+                  ) : fileViewerPosition === 'left' ? (
+                    /* Left position: file viewer on left, terminals on right */
+                    <>
+                      {/* File viewer - left side */}
+                      {showFileViewer && fileViewer && (
+                        <div
+                          className="flex-shrink-0 bg-bg-secondary min-h-0"
+                          style={{
+                            width: terminalsVisible ? layoutSizes.fileViewerSize : undefined,
+                            flex: terminalsVisible ? undefined : 1,
+                          }}
+                        >
+                          {fileViewer}
                         </div>
                       )}
+
+                      {/* Draggable divider (vertical) */}
+                      {showFileViewer && fileViewer && terminalsVisible && (
+                        <Divider type="fileViewer" direction="vertical" />
+                      )}
+
+                      {/* Terminals container - always mounted, hidden when not visible */}
+                      <div className={`flex-1 flex flex-col min-w-0 ${showFileViewer && fileViewer ? 'border-l border-[#4a4a4a]' : ''} ${!terminalsVisible ? 'hidden' : ''}`}>
+                        {/* Agent terminal - always mounted */}
+                        <div className={`min-w-0 bg-bg-primary ${showUserTerminal ? 'border-b border-[#4a4a4a]' : ''} ${showAgentTerminal ? 'flex-1' : 'hidden'}`}>
+                          {agentTerminal}
+                        </div>
+
+                        {/* User terminal divider */}
+                        {showAgentTerminal && showUserTerminal && (
+                          <Divider type="userTerminal" direction="horizontal" />
+                        )}
+
+                        {/* User terminal - always mounted */}
+                        <div
+                          className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : 'flex-1'} ${!showUserTerminal ? 'hidden' : ''}`}
+                          style={showAgentTerminal && showUserTerminal ? { height: layoutSizes.userTerminalHeight } : undefined}
+                        >
+                          {userTerminal}
+                        </div>
+                      </div>
+
+                      {/* Show placeholder if nothing visible */}
+                      {!terminalsVisible && !showFileViewer && (
+                        <div className="flex-1 flex items-center justify-center bg-bg-primary text-text-secondary">
+                          <div className="text-center">
+                            <p>No panels visible</p>
+                            <p className="text-sm mt-2">
+                              Press {formatShortcut('4')} for Agent or {formatShortcut('5')} for Terminal
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Top position: file viewer on top, terminals below */
+                    <>
+                      {/* File viewer - top */}
+                      {showFileViewer && fileViewer && (
+                        <div
+                          className="flex-shrink-0 bg-bg-secondary min-h-0"
+                          style={{
+                            height: terminalsVisible ? layoutSizes.fileViewerSize : undefined,
+                            flex: terminalsVisible ? undefined : 1,
+                          }}
+                        >
+                          {fileViewer}
+                        </div>
+                      )}
+
+                      {/* Draggable divider (horizontal) */}
+                      {showFileViewer && fileViewer && terminalsVisible && (
+                        <Divider type="fileViewer" direction="horizontal" />
+                      )}
+
+                      {/* Agent terminal - always mounted, hidden when not visible */}
+                      <div className={`min-w-0 bg-bg-primary ${showFileViewer && fileViewer ? 'border-t border-[#4a4a4a]' : ''} ${showUserTerminal ? 'border-b border-[#4a4a4a]' : ''} ${showAgentTerminal ? 'flex-1' : 'hidden'}`}>
+                        {agentTerminal}
+                      </div>
 
                       {/* User terminal divider */}
                       {showAgentTerminal && showUserTerminal && (
                         <Divider type="userTerminal" direction="horizontal" />
                       )}
 
-                      {/* User terminal */}
-                      {showUserTerminal && (
-                        <div
-                          className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : 'flex-1'}`}
-                          style={showAgentTerminal ? { height: layoutSizes.userTerminalHeight } : undefined}
-                        >
-                          {userTerminal}
+                      {/* User terminal - always mounted, hidden when not visible */}
+                      <div
+                        className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : ''} ${!showAgentTerminal && showUserTerminal ? 'flex-1' : ''} ${!showAgentTerminal && showFileViewer && fileViewer ? 'border-t border-[#4a4a4a]' : ''} ${!showUserTerminal ? 'hidden' : ''}`}
+                        style={showAgentTerminal && showUserTerminal ? { height: layoutSizes.userTerminalHeight } : undefined}
+                      >
+                        {userTerminal}
+                      </div>
+
+                      {/* Show placeholder if no panels are visible */}
+                      {!showFileViewer && !terminalsVisible && (
+                        <div className="flex-1 flex items-center justify-center bg-bg-primary text-text-secondary">
+                          <div className="text-center">
+                            <p>No panels visible</p>
+                            <p className="text-sm mt-2">
+                              Press {formatShortcut('4')} for Agent or {formatShortcut('5')} for Terminal
+                            </p>
+                          </div>
                         </div>
                       )}
-                    </div>
+                    </>
                   )}
-
-                  {/* Show placeholder if nothing visible */}
-                  {!showAgentTerminal && !showUserTerminal && !fileViewer && (
-                    <div className="flex-1 flex items-center justify-center bg-bg-primary text-text-secondary">
-                      <div className="text-center">
-                        <p>No panels visible</p>
-                        <p className="text-sm mt-2">
-                          Press {formatShortcut('4')} for Agent or {formatShortcut('5')} for Terminal
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                /* Top position: file viewer on top, terminals below */
-                <>
-                  {/* File viewer - top */}
-                  {fileViewer && (
-                    <div
-                      className="flex-shrink-0 bg-bg-secondary min-h-0"
-                      style={{
-                        height: (showAgentTerminal || showUserTerminal) ? layoutSizes.fileViewerSize : undefined,
-                        flex: (showAgentTerminal || showUserTerminal) ? undefined : 1,
-                      }}
-                    >
-                      {fileViewer}
-                    </div>
-                  )}
-
-                  {/* Draggable divider (horizontal) */}
-                  {fileViewer && (showAgentTerminal || showUserTerminal) && (
-                    <Divider type="fileViewer" direction="horizontal" />
-                  )}
-
-                  {/* Agent terminal */}
-                  {showAgentTerminal && (
-                    <div className={`flex-1 min-w-0 bg-bg-primary ${fileViewer ? 'border-t border-[#4a4a4a]' : ''} ${showUserTerminal ? 'border-b border-[#4a4a4a]' : ''}`}>
-                      {agentTerminal}
-                    </div>
-                  )}
-
-                  {/* User terminal divider */}
-                  {showAgentTerminal && showUserTerminal && (
-                    <Divider type="userTerminal" direction="horizontal" />
-                  )}
-
-                  {/* User terminal */}
-                  {showUserTerminal && (
-                    <div
-                      className={`bg-bg-primary ${showAgentTerminal ? 'flex-shrink-0' : ''} ${!showAgentTerminal ? 'flex-1' : ''} ${!showAgentTerminal && fileViewer ? 'border-t border-[#4a4a4a]' : ''}`}
-                      style={showAgentTerminal ? { height: layoutSizes.userTerminalHeight } : undefined}
-                    >
-                      {userTerminal}
-                    </div>
-                  )}
-
-                  {/* Show placeholder if no panels are visible */}
-                  {!showFileViewer && !showAgentTerminal && !showUserTerminal && (
-                    <div className="flex-1 flex items-center justify-center bg-bg-primary text-text-secondary">
-                      <div className="text-center">
-                        <p>No panels visible</p>
-                        <p className="text-sm mt-2">
-                          Press {formatShortcut('4')} for Agent or {formatShortcut('5')} for Terminal
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                </div>
 
               </>
             )}

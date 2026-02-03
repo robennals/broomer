@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { basename } from 'path-browserify'
+import { PANEL_IDS, DEFAULT_TOOLBAR_PANELS } from '../panels/types'
 
 export type SessionStatus = 'working' | 'waiting' | 'idle' | 'error'
 export type FileViewerPosition = 'top' | 'left'
@@ -14,6 +15,9 @@ export interface LayoutSizes {
 
 export type ExplorerFilter = 'all' | 'changed'
 
+// Panel visibility map type
+export type PanelVisibility = Record<string, boolean>
+
 export interface Session {
   id: string
   name: string
@@ -21,7 +25,9 @@ export interface Session {
   branch: string
   status: SessionStatus
   agentId: string | null
-  // Per-session UI state (persisted)
+  // Per-session UI state (persisted) - generic panel visibility
+  panelVisibility: PanelVisibility
+  // Legacy fields kept for backwards compat - computed from panelVisibility
   showAgentTerminal: boolean
   showUserTerminal: boolean
   showExplorer: boolean
@@ -48,12 +54,30 @@ const DEFAULT_LAYOUT_SIZES: LayoutSizes = {
 
 const DEFAULT_SIDEBAR_WIDTH = 224 // 14rem = 224px
 
+// Default panel visibility for new sessions
+const DEFAULT_PANEL_VISIBILITY: PanelVisibility = {
+  [PANEL_IDS.AGENT_TERMINAL]: true,
+  [PANEL_IDS.USER_TERMINAL]: false,
+  [PANEL_IDS.EXPLORER]: false,
+  [PANEL_IDS.FILE_VIEWER]: false,
+}
+
+// Global panel visibility (sidebar, settings)
+const DEFAULT_GLOBAL_PANEL_VISIBILITY: PanelVisibility = {
+  [PANEL_IDS.SIDEBAR]: true,
+  [PANEL_IDS.SETTINGS]: false,
+}
+
 interface SessionStore {
   sessions: Session[]
   activeSessionId: string | null
   isLoading: boolean
+  // Global panel state
   showSidebar: boolean
+  showSettings: boolean
   sidebarWidth: number
+  toolbarPanels: string[]
+  globalPanelVisibility: PanelVisibility
 
   // Actions
   loadSessions: () => Promise<void>
@@ -62,7 +86,12 @@ interface SessionStore {
   setActiveSession: (id: string | null) => void
   updateSessionBranch: (id: string, branch: string) => void
   refreshAllBranches: () => Promise<void>
-  // UI state actions
+  // Generic panel actions
+  togglePanel: (sessionId: string, panelId: string) => void
+  toggleGlobalPanel: (panelId: string) => void
+  setPanelVisibility: (sessionId: string, panelId: string, visible: boolean) => void
+  setToolbarPanels: (panels: string[]) => void
+  // UI state actions (backwards compat aliases)
   toggleSidebar: () => void
   setSidebarWidth: (width: number) => void
   toggleAgentTerminal: (id: string) => void
@@ -80,9 +109,46 @@ interface SessionStore {
 
 const generateId = () => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
+// Helper to sync legacy fields from panelVisibility
+function syncLegacyFields(session: Session): Session {
+  return {
+    ...session,
+    showAgentTerminal: session.panelVisibility[PANEL_IDS.AGENT_TERMINAL] ?? true,
+    showUserTerminal: session.panelVisibility[PANEL_IDS.USER_TERMINAL] ?? false,
+    showExplorer: session.panelVisibility[PANEL_IDS.EXPLORER] ?? false,
+    showFileViewer: session.panelVisibility[PANEL_IDS.FILE_VIEWER] ?? false,
+  }
+}
+
+// Helper to create panelVisibility from legacy fields
+function createPanelVisibilityFromLegacy(data: {
+  showAgentTerminal?: boolean
+  showUserTerminal?: boolean
+  showExplorer?: boolean
+  showFileViewer?: boolean
+  panelVisibility?: PanelVisibility
+}): PanelVisibility {
+  // If panelVisibility exists, use it
+  if (data.panelVisibility) {
+    return data.panelVisibility
+  }
+  // Otherwise, create from legacy fields
+  return {
+    [PANEL_IDS.AGENT_TERMINAL]: data.showAgentTerminal ?? true,
+    [PANEL_IDS.USER_TERMINAL]: data.showUserTerminal ?? false,
+    [PANEL_IDS.EXPLORER]: data.showExplorer ?? false,
+    [PANEL_IDS.FILE_VIEWER]: data.showFileViewer ?? false,
+  }
+}
+
 // Debounced save to avoid too many writes during dragging
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
-const debouncedSave = async (sessions: Session[], showSidebar: boolean, sidebarWidth: number) => {
+const debouncedSave = async (
+  sessions: Session[],
+  globalPanelVisibility: PanelVisibility,
+  sidebarWidth: number,
+  toolbarPanels: string[]
+) => {
   if (saveTimeout) clearTimeout(saveTimeout)
   saveTimeout = setTimeout(async () => {
     const config = await window.config.load()
@@ -93,6 +159,9 @@ const debouncedSave = async (sessions: Session[], showSidebar: boolean, sidebarW
         name: s.name,
         directory: s.directory,
         agentId: s.agentId,
+        // Save new panelVisibility format
+        panelVisibility: s.panelVisibility,
+        // Also save legacy fields for backwards compat
         showAgentTerminal: s.showAgentTerminal,
         showUserTerminal: s.showUserTerminal,
         showExplorer: s.showExplorer,
@@ -102,8 +171,10 @@ const debouncedSave = async (sessions: Session[], showSidebar: boolean, sidebarW
         layoutSizes: s.layoutSizes,
         explorerFilter: s.explorerFilter,
       })),
-      showSidebar,
+      // Global state
+      showSidebar: globalPanelVisibility[PANEL_IDS.SIDEBAR] ?? true,
       sidebarWidth,
+      toolbarPanels,
     })
   }, 500)
 }
@@ -113,7 +184,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   activeSessionId: null,
   isLoading: true,
   showSidebar: true,
+  showSettings: false,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+  toolbarPanels: [...DEFAULT_TOOLBAR_PANELS],
+  globalPanelVisibility: { ...DEFAULT_GLOBAL_PANEL_VISIBILITY },
 
   loadSessions: async () => {
     try {
@@ -122,18 +196,22 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
       for (const sessionData of config.sessions) {
         const branch = await window.git.getBranch(sessionData.directory)
-        sessions.push({
+        const panelVisibility = createPanelVisibilityFromLegacy(sessionData)
+
+        const session: Session = {
           id: sessionData.id,
           name: sessionData.name,
           directory: sessionData.directory,
           branch,
           status: 'idle',
           agentId: sessionData.agentId ?? null,
-          // Restore UI state from config or use defaults
-          showAgentTerminal: sessionData.showAgentTerminal ?? true,
-          showUserTerminal: sessionData.showUserTerminal ?? false,
-          showExplorer: sessionData.showExplorer ?? false,
-          showFileViewer: sessionData.showFileViewer ?? false,
+          // New panel visibility system
+          panelVisibility,
+          // Legacy fields (synced from panelVisibility)
+          showAgentTerminal: panelVisibility[PANEL_IDS.AGENT_TERMINAL] ?? true,
+          showUserTerminal: panelVisibility[PANEL_IDS.USER_TERMINAL] ?? false,
+          showExplorer: panelVisibility[PANEL_IDS.EXPLORER] ?? false,
+          showFileViewer: panelVisibility[PANEL_IDS.FILE_VIEWER] ?? false,
           showDiff: sessionData.showDiff ?? false,
           selectedFilePath: null,
           fileViewerPosition: sessionData.fileViewerPosition ?? 'top',
@@ -144,7 +222,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           lastMessageTime: null,
           waitingType: null,
           isUnread: false,
-        })
+        }
+        sessions.push(session)
+      }
+
+      const globalPanelVisibility = {
+        [PANEL_IDS.SIDEBAR]: config.showSidebar ?? true,
+        [PANEL_IDS.SETTINGS]: false,
       }
 
       set({
@@ -153,6 +237,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         isLoading: false,
         showSidebar: config.showSidebar ?? true,
         sidebarWidth: config.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
+        toolbarPanels: config.toolbarPanels ?? [...DEFAULT_TOOLBAR_PANELS],
+        globalPanelVisibility,
       })
     } catch {
       set({ sessions: [], activeSessionId: null, isLoading: false })
@@ -169,6 +255,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const name = basename(directory)
     const id = generateId()
 
+    const panelVisibility = { ...DEFAULT_PANEL_VISIBILITY }
     const newSession: Session = {
       id,
       name,
@@ -176,6 +263,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       branch,
       status: 'idle',
       agentId,
+      panelVisibility,
       showAgentTerminal: true,
       showUserTerminal: false,
       showExplorer: false,
@@ -192,7 +280,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       isUnread: false,
     }
 
-    const { sessions, showSidebar, sidebarWidth } = get()
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
     const updatedSessions = [...sessions, newSession]
 
     set({
@@ -200,11 +288,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       activeSessionId: id,
     })
 
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
   },
 
   removeSession: async (id: string) => {
-    const { sessions, activeSessionId, showSidebar, sidebarWidth } = get()
+    const { sessions, activeSessionId, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
     const updatedSessions = sessions.filter((s) => s.id !== id)
 
     let newActiveId = activeSessionId
@@ -217,7 +305,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       activeSessionId: newActiveId,
     })
 
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
   },
 
   setActiveSession: (id: string | null) => {
@@ -241,89 +329,133 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
   },
 
+  // Generic panel toggle for session-specific panels
+  togglePanel: (sessionId: string, panelId: string) => {
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const updatedSessions = sessions.map((s) => {
+      if (s.id !== sessionId) return s
+      const newVisibility = {
+        ...s.panelVisibility,
+        [panelId]: !s.panelVisibility[panelId],
+      }
+      return syncLegacyFields({
+        ...s,
+        panelVisibility: newVisibility,
+      })
+    })
+    set({ sessions: updatedSessions })
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
+  },
+
+  // Toggle global panels (sidebar, settings)
+  toggleGlobalPanel: (panelId: string) => {
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const newVisibility = {
+      ...globalPanelVisibility,
+      [panelId]: !globalPanelVisibility[panelId],
+    }
+    set({
+      globalPanelVisibility: newVisibility,
+      // Keep legacy fields in sync
+      showSidebar: newVisibility[PANEL_IDS.SIDEBAR] ?? true,
+      showSettings: newVisibility[PANEL_IDS.SETTINGS] ?? false,
+    })
+    debouncedSave(sessions, newVisibility, sidebarWidth, toolbarPanels)
+  },
+
+  setPanelVisibility: (sessionId: string, panelId: string, visible: boolean) => {
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const updatedSessions = sessions.map((s) => {
+      if (s.id !== sessionId) return s
+      const newVisibility = {
+        ...s.panelVisibility,
+        [panelId]: visible,
+      }
+      return syncLegacyFields({
+        ...s,
+        panelVisibility: newVisibility,
+      })
+    })
+    set({ sessions: updatedSessions })
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
+  },
+
+  setToolbarPanels: (panels: string[]) => {
+    const { sessions, globalPanelVisibility, sidebarWidth } = get()
+    set({ toolbarPanels: panels })
+    debouncedSave(sessions, globalPanelVisibility, sidebarWidth, panels)
+  },
+
+  // Legacy toggle functions - now call generic toggle
   toggleSidebar: () => {
-    const { showSidebar, sessions, sidebarWidth } = get()
-    const newShowSidebar = !showSidebar
-    set({ showSidebar: newShowSidebar })
-    debouncedSave(sessions, newShowSidebar, sidebarWidth)
+    get().toggleGlobalPanel(PANEL_IDS.SIDEBAR)
   },
 
   setSidebarWidth: (width: number) => {
-    const { sessions, showSidebar } = get()
+    const { sessions, globalPanelVisibility, toolbarPanels } = get()
     set({ sidebarWidth: width })
-    debouncedSave(sessions, showSidebar, width)
+    debouncedSave(sessions, globalPanelVisibility, width, toolbarPanels)
   },
 
   toggleAgentTerminal: (id: string) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
-    const updatedSessions = sessions.map((s) =>
-      s.id === id ? { ...s, showAgentTerminal: !s.showAgentTerminal } : s
-    )
-    set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    get().togglePanel(id, PANEL_IDS.AGENT_TERMINAL)
   },
 
   toggleUserTerminal: (id: string) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
-    const updatedSessions = sessions.map((s) =>
-      s.id === id ? { ...s, showUserTerminal: !s.showUserTerminal } : s
-    )
-    set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    get().togglePanel(id, PANEL_IDS.USER_TERMINAL)
   },
 
   toggleExplorer: (id: string) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
-    const updatedSessions = sessions.map((s) =>
-      s.id === id ? { ...s, showExplorer: !s.showExplorer } : s
-    )
-    set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    get().togglePanel(id, PANEL_IDS.EXPLORER)
   },
 
   toggleFileViewer: (id: string) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
-    const updatedSessions = sessions.map((s) =>
-      s.id === id ? { ...s, showFileViewer: !s.showFileViewer } : s
-    )
-    set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    get().togglePanel(id, PANEL_IDS.FILE_VIEWER)
   },
 
   selectFile: (id: string, filePath: string) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
-    const updatedSessions = sessions.map((s) =>
-      s.id === id ? { ...s, selectedFilePath: filePath, showFileViewer: true } : s
-    )
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const updatedSessions = sessions.map((s) => {
+      if (s.id !== id) return s
+      const newVisibility = {
+        ...s.panelVisibility,
+        [PANEL_IDS.FILE_VIEWER]: true,
+      }
+      return syncLegacyFields({
+        ...s,
+        selectedFilePath: filePath,
+        panelVisibility: newVisibility,
+      })
+    })
     set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
   },
 
   setFileViewerPosition: (id: string, position: FileViewerPosition) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
     const updatedSessions = sessions.map((s) =>
       s.id === id ? { ...s, fileViewerPosition: position } : s
     )
     set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
   },
 
   updateLayoutSize: (id: string, key: keyof LayoutSizes, value: number) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
     const updatedSessions = sessions.map((s) =>
       s.id === id ? { ...s, layoutSizes: { ...s.layoutSizes, [key]: value } } : s
     )
     set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
   },
 
   setExplorerFilter: (id: string, filter: ExplorerFilter) => {
-    const { sessions, showSidebar, sidebarWidth } = get()
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
     const updatedSessions = sessions.map((s) =>
       s.id === id ? { ...s, explorerFilter: filter } : s
     )
     set({ sessions: updatedSessions })
-    debouncedSave(updatedSessions, showSidebar, sidebarWidth)
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
   },
 
   updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string; waitingType?: WaitingType }) => {

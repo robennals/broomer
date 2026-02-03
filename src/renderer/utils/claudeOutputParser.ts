@@ -9,8 +9,6 @@ export interface ParseResult {
 // Spinner characters used by Claude Code
 const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-// Claude Code status icons
-const CLAUDE_STATUS_ICONS = ['✻', '✳', '⏺', '⎿', '◇', '◆', '●', '○']
 
 // Comprehensive ANSI/terminal escape sequence stripping
 // This is intentionally aggressive to catch all terminal control sequences
@@ -51,17 +49,26 @@ const TOOL_APPROVAL_PATTERNS = [
   /\[Y\/n\]/,
   /\[y\/N\]/,
   /Do you want to (run|execute|allow|proceed|make this edit|make these edits)/i,
+  /Do you want to proceed\??/i,  // Bash approval (with or without ?)
   /Press Enter to approve/i,
   /Allow once/i,
   /Allow always/i,
   /Yes, allow all/i,
   /Esc to cancel/i,
-  /❯\s*\d+\.\s*(Yes|No)/,  // Claude's menu selector
+  /Tab to amend/i,  // Another indicator of approval prompt
+  /❯\s*\d+\.\s*(Yes|No)/,  // Claude's menu selector on selected item
+  /\d+\.\s*(Yes|No)/,  // Numbered menu options (Yes/No) anywhere in text
   /Would you like to proceed/i,  // Plan approval
   /Yes, clear context/i,
   /Yes, auto-accept/i,
   /Yes, manually approve/i,
   /ctrl-g to edit/i,  // Plan file hint
+  /always allow access to/i,  // Permission grant option
+  /◆\s*(Yes|No)/,  // Diamond bullet menu items
+  /○\s*(Yes|No)/,  // Circle bullet menu items
+  /●\s*(Yes|No)/,  // Filled circle menu items
+  /^\s*Yes\s*$/m,  // Standalone "Yes" option
+  /^\s*No\s*$/m,  // Standalone "No" option
 ]
 
 // Question patterns - Claude Code asking the user something
@@ -73,10 +80,6 @@ const QUESTION_PATTERNS = [
   /Which (file|option|approach)/i,
 ]
 
-// Claude Code prompt patterns (waiting for next task)
-const CLAUDE_PROMPT_PATTERNS = [
-  />\s*$/m, // Claude's prompt after completing a task
-]
 
 // Working indicators - Claude Code specific (including Unicode status chars)
 const WORKING_PATTERNS = [
@@ -84,6 +87,7 @@ const WORKING_PATTERNS = [
   /Vibing…/i,
   /Thinking…/i,
   /thinking\)/i,  // "thought for 1s)" or "thinking)"
+  /thought for \d+/i,  // "thought for 10s"
   /Reading\s+\S+/i,
   /Writing\s+\S+/i,
   /Editing\s+\S+/i,
@@ -93,6 +97,10 @@ const WORKING_PATTERNS = [
   /Executing/i,
   /Running/i,
   /tokens\s*·/i,  // Token counter indicates active work
+  /↓\s*[\d.]+k?\s*tokens/i,  // Streaming token indicator
+  /Burrowing/i,  // Sub-agent activity
+  /Launching/i,  // Starting a sub-agent
+  /Task\s*\([^)]+\)/i,  // Task tool in progress
 ]
 
 // Status lines to filter out from message extraction
@@ -107,6 +115,11 @@ const STATUS_LINE_PATTERNS = [
   /^\s*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+\s*$/,  // Just spinners
   /ctrl\+[a-z]\s+to/i,  // Keyboard hints
   /^\s*\+\d+\s+lines/i,  // "+20 lines" collapsed indicator
+  /^\s*\d+\s+files?\s+[+-]\d+\s+[+-]\d+/i,  // Git status like "2 files +0 -0"
+  /^\s*[─━═]+\s*$/,  // Horizontal line separators
+  /^\s*❯\s*$/,  // Empty prompt line
+  /MCP server/i,  // MCP server messages
+  /needs auth/i,  // Auth messages
 ]
 
 // Action patterns - these are what we WANT to show
@@ -167,17 +180,61 @@ export class ClaudeOutputParser {
     // Spinner characters indicate active work
     if (this.hasSpinner(text)) return true
 
-    // Claude status icons indicate work
-    if (CLAUDE_STATUS_ICONS.some(icon => text.includes(icon))) {
-      // But not if it's a completed action marker
-      if (!/^⎿\s/.test(text.trim())) return true
-    }
-
     // Check for working keywords
     for (const pattern of WORKING_PATTERNS) {
       if (pattern.test(text)) return true
     }
 
+    // Claude status icons at the START of a line indicate work (not just anywhere)
+    // This avoids false positives from decorative UI elements
+    const lines = text.split('\n')
+    for (const line of lines) {
+      const trimmed = line.trim()
+      // Status icon at start followed by any action text (more permissive)
+      if (/^[✻✳]\s+\S/i.test(trimmed)) {
+        return true
+      }
+      // Active tool execution (⏺ at start with tool name)
+      if (/^⏺\s*(Read|Write|Edit|Bash|Glob|Grep|Task|WebFetch|WebSearch)/i.test(trimmed)) {
+        return true
+      }
+      // Result marker with ongoing action
+      if (/^⎿\s*(Reading|Writing|Editing|Running|Executing|Searching)/i.test(trimmed)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * Check if text ends with Claude's idle prompt (❯)
+   * Must be careful not to match menu selectors which also use ❯
+   */
+  private isAtIdlePrompt(text: string): boolean {
+    const lines = text.trim().split('\n')
+
+    // First check if we're in a menu context (has numbered options)
+    const recentText = lines.slice(-10).join('\n')
+    if (/\d+\.\s*(Yes|No)/i.test(recentText)) {
+      return false  // In a menu, not idle
+    }
+    if (/Do you want to/i.test(recentText)) {
+      return false  // Approval prompt, not idle
+    }
+    if (/\[Y\/n\]/i.test(recentText) || /\[y\/N\]/i.test(recentText)) {
+      return false  // Confirmation prompt, not idle
+    }
+
+    // Look at the last few non-empty lines
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 3); i--) {
+      const line = lines[i].trim()
+      if (!line) continue
+      // Check for the Claude Code prompt (❯ alone, not followed by numbers/text)
+      if (/^❯\s*$/.test(line)) return true
+      // If we find a non-prompt content line, stop
+      if (line.length > 2 && !/^[─━═]+$/.test(line)) break
+    }
     return false
   }
 
@@ -197,12 +254,10 @@ export class ClaudeOutputParser {
       if (pattern.test(cleanText)) return 'question'
     }
 
-    // Check for Claude prompt (only if we've confirmed Claude is running)
-    // AND we recently had activity (not just an idle shell)
-    if (this.hasSeenClaude && this.lastStatus === 'working') {
-      for (const pattern of CLAUDE_PROMPT_PATTERNS) {
-        if (pattern.test(cleanText)) return 'prompt'
-      }
+    // Check for Claude prompt (idle, waiting for next task)
+    // If we see the ❯ prompt at the end of the buffer, Claude is idle
+    if (this.hasSeenClaude && this.isAtIdlePrompt(cleanText)) {
+      return 'prompt'
     }
 
     return null
@@ -334,7 +389,14 @@ export class ClaudeOutputParser {
       // Check if waiting for input first (takes precedence)
       waitingType = this.detectWaitingType(recentBuffer)
       if (waitingType) {
-        status = 'waiting'
+        // 'prompt' means Claude is at the idle prompt (❯), ready for next task
+        // 'tool' or 'question' means Claude needs user action
+        if (waitingType === 'prompt') {
+          status = 'idle'
+          waitingType = null  // Clear waitingType since we're idle, not waiting
+        } else {
+          status = 'waiting'
+        }
       } else if (this.detectWorking(recentBuffer)) {
         // Check if working - use buffer to avoid chunk boundary issues
         status = 'working'

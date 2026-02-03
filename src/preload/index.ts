@@ -57,11 +57,16 @@ export type LayoutSizesData = {
   diffPanelWidth: number
 }
 
+export type PanelVisibility = Record<string, boolean>
+
 export type SessionData = {
   id: string
   name: string
   directory: string
   agentId?: string | null
+  // New generic panel visibility
+  panelVisibility?: PanelVisibility
+  // Legacy fields for backwards compat
   showAgentTerminal?: boolean
   showUserTerminal?: boolean
   showExplorer?: boolean
@@ -77,6 +82,7 @@ export type ConfigData = {
   sessions: SessionData[]
   showSidebar?: boolean
   sidebarWidth?: number
+  toolbarPanels?: string[]
 }
 
 export type ConfigApi = {

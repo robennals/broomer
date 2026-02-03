@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { useErrorStore } from '../store/errors'
 import { useSessionStore } from '../store/sessions'
 import { ClaudeOutputParser } from '../utils/claudeOutputParser'
+import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
@@ -18,6 +20,7 @@ export default function Terminal({ sessionId, cwd, command, isAgentTerminal = fa
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const serializeAddonRef = useRef<SerializeAddon | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
   const parserRef = useRef<ClaudeOutputParser | null>(null)
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -104,8 +107,33 @@ export default function Terminal({ sessionId, cwd, command, isAgentTerminal = fa
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
 
+    const serializeAddon = new SerializeAddon()
+    terminal.loadAddon(serializeAddon)
+    serializeAddonRef.current = serializeAddon
+
     terminal.open(containerRef.current)
-    fitAddon.fit()
+
+    // Register buffer getter for copy functionality (agent terminals only)
+    if (isAgentTerminal && sessionId) {
+      terminalBufferRegistry.register(sessionId, () => {
+        try {
+          return serializeAddon.serialize()
+        } catch {
+          return ''
+        }
+      })
+    }
+
+    // Wait for next frame to ensure container has dimensions before fitting
+    requestAnimationFrame(() => {
+      if (containerRef.current && containerRef.current.offsetWidth > 0 && containerRef.current.offsetHeight > 0) {
+        try {
+          fitAddon.fit()
+        } catch (e) {
+          // Ignore fit errors during initialization
+        }
+      }
+    })
 
     // Intercept keyboard shortcuts - dispatch custom event for Layout to handle
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
@@ -200,10 +228,14 @@ export default function Terminal({ sessionId, cwd, command, isAgentTerminal = fa
       if (!entry || entry.contentRect.width === 0 || entry.contentRect.height === 0) {
         return
       }
-      fitAddon.fit()
-      // Only resize PTY if we have valid dimensions
-      if (id && terminal.cols > 0 && terminal.rows > 0) {
-        window.pty.resize(id, terminal.cols, terminal.rows)
+      try {
+        fitAddon.fit()
+        // Only resize PTY if we have valid dimensions
+        if (id && terminal.cols > 0 && terminal.rows > 0) {
+          window.pty.resize(id, terminal.cols, terminal.rows)
+        }
+      } catch (e) {
+        // Ignore fit errors (can happen if terminal not fully initialized)
       }
     })
     resizeObserver.observe(containerRef.current)
@@ -223,6 +255,10 @@ export default function Terminal({ sessionId, cwd, command, isAgentTerminal = fa
       if (idleTimeoutRef.current) {
         clearTimeout(idleTimeoutRef.current)
       }
+      // Unregister buffer getter
+      if (isAgentTerminal && sessionId) {
+        terminalBufferRegistry.unregister(sessionId)
+      }
     }
     // Note: scheduleUpdate is stable (uses refs internally) so not needed in deps
   }, [sessionId, cwd, command, isAgentTerminal, addError])
@@ -231,8 +267,14 @@ export default function Terminal({ sessionId, cwd, command, isAgentTerminal = fa
   useEffect(() => {
     const handleResize = () => {
       if (fitAddonRef.current && terminalRef.current && ptyId) {
-        fitAddonRef.current.fit()
-        window.pty.resize(ptyId, terminalRef.current.cols, terminalRef.current.rows)
+        try {
+          fitAddonRef.current.fit()
+          if (terminalRef.current.cols > 0 && terminalRef.current.rows > 0) {
+            window.pty.resize(ptyId, terminalRef.current.cols, terminalRef.current.rows)
+          }
+        } catch (e) {
+          // Ignore fit errors
+        }
       }
     }
 
