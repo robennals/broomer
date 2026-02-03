@@ -8,8 +8,7 @@ files:
   - '!electron.vite.config.*'
   - '!{.eslintignore,.eslintrc.js,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-asarUnpack:
-  - '**/*.node'
+asar: false
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

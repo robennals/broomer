@@ -49,9 +49,15 @@ export default function Layout({
   onOpenPanelPicker,
 }: LayoutProps) {
   const [draggingDivider, setDraggingDivider] = useState<DividerType>(null)
+  const [isDev, setIsDev] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const mainContentRef = useRef<HTMLDivElement>(null)
   const { registry, toolbarPanels, getShortcutKey } = usePanelContext()
+
+  // Check if we're in dev mode on mount
+  useEffect(() => {
+    window.app.isDev().then(setIsDev)
+  }, [])
 
   // Get visibility for a panel, considering global vs session state
   const isPanelVisible = useCallback((panelId: string): boolean => {
@@ -261,6 +267,11 @@ export default function Layout({
       >
         <div className="flex items-center gap-2 pl-16">
           <span className="text-sm font-medium text-text-primary">Agent Manager</span>
+          {isDev && (
+            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+              DEV
+            </span>
+          )}
         </div>
         <div
           className="flex items-center gap-2"

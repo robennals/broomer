@@ -139,11 +139,20 @@ const configApi: ConfigApi = {
   save: (config) => ipcRenderer.invoke('config:save', config),
 }
 
+export type AppApi = {
+  isDev: () => Promise<boolean>
+}
+
+const appApi: AppApi = {
+  isDev: () => ipcRenderer.invoke('app:isDev'),
+}
+
 contextBridge.exposeInMainWorld('pty', ptyApi)
 contextBridge.exposeInMainWorld('dialog', dialogApi)
 contextBridge.exposeInMainWorld('fs', fsApi)
 contextBridge.exposeInMainWorld('git', gitApi)
 contextBridge.exposeInMainWorld('config', configApi)
+contextBridge.exposeInMainWorld('app', appApi)
 
 declare global {
   interface Window {
@@ -152,5 +161,6 @@ declare global {
     fs: FsApi
     git: GitApi
     config: ConfigApi
+    app: AppApi
   }
 }

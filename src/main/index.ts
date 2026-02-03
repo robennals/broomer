@@ -49,6 +49,20 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // Ensure window shows once ready
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+  })
+
+  // Log renderer errors
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    console.error('Failed to load:', errorCode, errorDescription)
+  })
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Render process gone:', details)
+  })
+
   // Kill all PTY processes and file watchers when window is closing
   mainWindow.on('close', () => {
     for (const [id, ptyProcess] of ptyProcesses) {
@@ -140,9 +154,9 @@ ipcMain.handle('pty:kill', (_event, id: string) => {
   }
 })
 
-// Config directory and file
+// Config directory and file - use different config for dev mode
 const CONFIG_DIR = join(homedir(), '.agent-manager')
-const CONFIG_FILE = join(CONFIG_DIR, 'config.json')
+const CONFIG_FILE = join(CONFIG_DIR, isDev ? 'config.dev.json' : 'config.json')
 
 // Default agents
 const DEFAULT_AGENTS = [
@@ -423,6 +437,9 @@ ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
     throw error
   }
 })
+
+// App info IPC handlers
+ipcMain.handle('app:isDev', () => isDev)
 
 // Dialog IPC handlers
 ipcMain.handle('dialog:openFolder', async () => {

@@ -16,7 +16,6 @@ A desktop application for managing multiple AI coding agents (like Claude Code) 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (`npm install -g pnpm`)
 
 ### Installation
 
@@ -26,10 +25,10 @@ git clone <your-repo-url>
 cd agent-manager
 
 # Install dependencies
-pnpm install
+npm install
 
 # Start in development mode
-pnpm dev
+npm run dev
 ```
 
 The app will open automatically. You'll see:
@@ -41,20 +40,31 @@ The app will open automatically. You'll see:
 
 ```bash
 # Start development server with hot reload
-pnpm dev
+npm run dev
 
-# Build for production
-pnpm build
+# Build for production (without packaging)
+npm run build
 
 # Preview production build
-pnpm preview
+npm run preview
 ```
+
+**Note:** Development mode (`npm run dev`) and production mode use separate config files:
+- Development: `~/.agent-manager/config.dev.json`
+- Production: `~/.agent-manager/config.json`
+
+This allows you to have test sessions in dev mode without affecting your real work.
+
+The dev build shows a yellow "DEV" chip in the title bar so you can easily tell which mode you're in.
 
 ### Building for Distribution
 
 ```bash
-# Build and package the app
-pnpm build
+# Build and package the app for macOS
+npm run dist
+
+# Run the packaged app
+npm start
 ```
 
 The packaged app will be in the `dist/` folder.
@@ -64,13 +74,13 @@ The packaged app will be in the `dist/` folder.
 Run the Playwright E2E tests (window is hidden):
 
 ```bash
-pnpm test
+npm test
 ```
 
 Run tests with visible window (useful for debugging):
 
 ```bash
-pnpm test:headed
+npm run test:headed
 ```
 
 Tests (23 total) cover:
@@ -109,9 +119,8 @@ npx @electron/rebuild
 
 ### Keyboard Shortcuts
 
-- `Cmd+T` - Toggle user terminal
-- `Cmd+B` - Toggle file panel
-- `Cmd+N` - New session
+- `Cmd+1-6` - Toggle panels (based on toolbar order)
+- `Cmd+Shift+C` - Copy terminal content + session summary to clipboard (for debugging)
 
 ## Architecture
 
