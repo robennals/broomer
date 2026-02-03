@@ -13,7 +13,7 @@
     "start": "open dist/mac-arm64/Agent\\ Manager.app",
     "test": "playwright test",
     "test:headed": "E2E_HEADLESS=false playwright test",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
