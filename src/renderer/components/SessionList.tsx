@@ -222,7 +222,7 @@ export default function SessionList({
                 )}
                 <button
                   onClick={(e) => handleDelete(e, session.id)}
-                  className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-status-error transition-opacity p-1 -m-1"
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-status-error transition-opacity p-1"
                   title="Delete session"
                 >
                   <svg
