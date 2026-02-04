@@ -47,6 +47,17 @@ const SearchIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
+const statusLabel = (status: string): string => {
+  switch (status) {
+    case 'modified': return 'Modified'
+    case 'added': return 'Added'
+    case 'deleted': return 'Deleted'
+    case 'untracked': return 'Untracked'
+    case 'renamed': return 'Renamed'
+    default: return status
+  }
+}
+
 // Status letter badge
 const StatusBadge = ({ status }: { status: string }) => {
   const letter = status.charAt(0).toUpperCase()
@@ -58,7 +69,7 @@ const StatusBadge = ({ status }: { status: string }) => {
     case 'untracked': color = 'text-gray-400'; break
     case 'renamed': color = 'text-blue-400'; break
   }
-  return <span className={`text-xs font-mono ${color}`}>{letter}</span>
+  return <span className={`text-xs font-mono ${color}`} title={statusLabel(status)}>{letter}</span>
 }
 
 const getStatusColor = (status?: string): string => {
@@ -447,6 +458,7 @@ export default function Explorer({
             isSelected ? 'bg-accent/20 ring-1 ring-accent/50' : 'hover:bg-bg-tertiary'
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          title={status ? `${node.name} — ${statusLabel(status.status)}` : node.name}
         >
           {node.isDirectory ? (
             <span className="text-text-secondary w-4 text-center">
@@ -479,26 +491,47 @@ export default function Explorer({
     const hasChanges = gitStatus.length > 0
 
     if (!hasChanges) {
+      const ahead = syncStatus?.ahead ?? 0
+      const behind = syncStatus?.behind ?? 0
+      const hasRemoteChanges = ahead > 0 || behind > 0
+
       // No changes: show sync view
       return (
-        <div className="flex flex-col h-full items-center justify-center gap-3 p-4">
+        <div className="flex flex-col h-full items-center justify-center gap-4 p-4">
           {syncStatus?.tracking && (
             <div className="text-xs text-text-secondary text-center">
-              <span>{syncStatus.current} &rarr; {syncStatus.tracking}</span>
-              {(syncStatus.ahead > 0 || syncStatus.behind > 0) && (
-                <span className="ml-2">
-                  {syncStatus.ahead > 0 && <span>&uarr;{syncStatus.ahead}</span>}
-                  {syncStatus.behind > 0 && <span className="ml-1">&darr;{syncStatus.behind}</span>}
-                </span>
-              )}
+              {syncStatus.current} &rarr; {syncStatus.tracking}
             </div>
           )}
-          <div className="text-xs text-text-secondary">No changes</div>
+
+          {hasRemoteChanges ? (
+            <div className="flex flex-col items-center gap-2">
+              {ahead > 0 && (
+                <div className="flex items-center gap-2 text-sm text-green-400">
+                  <span className="text-lg">&uarr;</span>
+                  <span className="font-medium">{ahead} commit{ahead !== 1 ? 's' : ''} to push</span>
+                </div>
+              )}
+              {behind > 0 && (
+                <div className="flex items-center gap-2 text-sm text-blue-400">
+                  <span className="text-lg">&darr;</span>
+                  <span className="font-medium">{behind} commit{behind !== 1 ? 's' : ''} to pull</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-text-secondary">Up to date</div>
+          )}
+
           {syncStatus?.tracking && (
             <button
               onClick={handleSync}
               disabled={isSyncing}
-              className="px-3 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 disabled:opacity-50"
+              className={`px-4 py-1.5 text-xs rounded text-white disabled:opacity-50 ${
+                hasRemoteChanges
+                  ? 'bg-accent hover:bg-accent/80'
+                  : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
+              }`}
             >
               {isSyncing ? 'Syncing...' : 'Sync Changes'}
             </button>
@@ -545,6 +578,7 @@ export default function Explorer({
               <div
                 key={`staged-${file.path}`}
                 className="flex items-center gap-2 px-3 py-1 hover:bg-bg-tertiary cursor-pointer group"
+                title={`${file.path} — ${statusLabel(file.status)} (staged)`}
                 onClick={() => {
                   if (onFileSelect && directory) {
                     onFileSelect(`${directory}/${file.path}`, true)
@@ -580,6 +614,7 @@ export default function Explorer({
               <div
                 key={`unstaged-${file.path}`}
                 className="flex items-center gap-2 px-3 py-1 hover:bg-bg-tertiary cursor-pointer group"
+                title={`${file.path} — ${statusLabel(file.status)}`}
                 onClick={() => {
                   if (onFileSelect && directory) {
                     onFileSelect(`${directory}/${file.path}`, true)
