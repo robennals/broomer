@@ -458,7 +458,8 @@ ipcMain.handle('git:status', async (_event, repoPath: string) => {
 
   try {
     const git = simpleGit(repoPath)
-    const status = await git.status()
+    // Use -uall to list individual files inside untracked directories
+    const status = await git.status(['-uall'])
     const files: { path: string; status: string; staged: boolean; indexStatus: string; workingDirStatus: string }[] = []
 
     for (const file of status.files) {

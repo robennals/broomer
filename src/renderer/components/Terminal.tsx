@@ -203,17 +203,49 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
     // Track scroll position to implement follow mode
     // When user scrolls up, disable auto-scroll; when they scroll to bottom, re-enable
+    // We need to distinguish user-initiated scrolls from write-triggered scrolls.
+    let isWriting = false
+
     const checkIfAtBottom = () => {
       const buffer = terminal.buffer.active
-      // We're at bottom if viewport is at or very close to the base (within 2 rows)
-      const atBottom = buffer.viewportY >= buffer.baseY - 2
+      // We're at bottom if viewport is at or very close to the base (within 3 rows)
+      const atBottom = buffer.viewportY >= buffer.baseY - 3
+      if (isWriting) {
+        // During a write, xterm auto-scrolls to bottom. Don't update follow state
+        // from write-triggered scroll events — only from user scrolls.
+        return
+      }
       isFollowingRef.current = atBottom
     }
 
-    // Listen for scroll events
+    // Listen for scroll events (fires for both user scrolls and programmatic scrolls)
     terminal.onScroll(() => {
       checkIfAtBottom()
     })
+
+    // Also listen for wheel events on the terminal container to catch user scroll intent
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY < 0) {
+        // User scrolled up — check if they're meaningfully above the bottom
+        requestAnimationFrame(() => {
+          const buffer = terminal.buffer.active
+          const atBottom = buffer.viewportY >= buffer.baseY - 3
+          if (!atBottom) {
+            isFollowingRef.current = false
+          }
+        })
+      } else if (e.deltaY > 0) {
+        // User scrolled down — check if they've reached the bottom
+        requestAnimationFrame(() => {
+          const buffer = terminal.buffer.active
+          const atBottom = buffer.viewportY >= buffer.baseY - 3
+          if (atBottom) {
+            isFollowingRef.current = true
+          }
+        })
+      }
+    }
+    containerRef.current.addEventListener('wheel', handleWheel)
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -232,7 +264,10 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
         // Connect PTY output to terminal
         const removeDataListener = window.pty.onData(id, (data) => {
-          terminal.write(data)
+          isWriting = true
+          terminal.write(data, () => {
+            isWriting = false
+          })
 
           // Auto-scroll to bottom if in follow mode
           if (isFollowingRef.current) {
@@ -314,10 +349,12 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
         // Ignore fit errors (can happen if terminal not fully initialized)
       }
     })
-    resizeObserver.observe(containerRef.current)
+    const containerEl = containerRef.current
+    resizeObserver.observe(containerEl)
 
     return () => {
       resizeObserver.disconnect()
+      containerEl.removeEventListener('wheel', handleWheel)
       cleanupRef.current?.()
       hooksCleanupRef.current?.()
       if (ptyId) {
