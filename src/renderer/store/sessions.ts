@@ -24,7 +24,7 @@ export interface LayoutSizes {
   diffPanelWidth: number
 }
 
-export type ExplorerFilter = 'all' | 'changed'
+export type ExplorerFilter = 'files' | 'source-control' | 'search'
 
 // Panel visibility map type
 export type PanelVisibility = Record<string, boolean>
@@ -247,7 +247,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           selectedFilePath: null,
           fileViewerPosition: sessionData.fileViewerPosition ?? 'top',
           layoutSizes: sessionData.layoutSizes ?? { ...DEFAULT_LAYOUT_SIZES },
-          explorerFilter: sessionData.explorerFilter ?? 'all',
+          explorerFilter: sessionData.explorerFilter === 'all' ? 'files'
+            : sessionData.explorerFilter === 'changed' ? 'source-control'
+            : sessionData.explorerFilter ?? 'files',
           // Runtime monitoring state
           lastMessage: null,
           lastMessageTime: null,
@@ -305,7 +307,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       selectedFilePath: null,
       fileViewerPosition: 'top',
       layoutSizes: { ...DEFAULT_LAYOUT_SIZES },
-      explorerFilter: 'all',
+      explorerFilter: 'files',
       // Runtime monitoring state
       lastMessage: null,
       lastMessageTime: null,

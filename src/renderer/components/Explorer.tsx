@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { FileEntry, GitFileStatus } from '../../preload/index'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { FileEntry, GitFileStatus, GitStatusResult, SearchResult } from '../../preload/index'
 import type { ExplorerFilter } from '../store/sessions'
 
 interface ExplorerProps {
   directory?: string
   onFileSelect?: (filePath: string, openInDiffMode: boolean) => void
   selectedFilePath?: string | null
-  gitStatus?: GitFileStatus[] // Git status passed from parent (refreshes on save)
+  gitStatus?: GitFileStatus[]
+  syncStatus?: GitStatusResult | null
   filter: ExplorerFilter
   onFilterChange: (filter: ExplorerFilter) => void
+  onGitStatusRefresh?: () => void
 }
 
 interface TreeNode extends FileEntry {
@@ -16,25 +18,90 @@ interface TreeNode extends FileEntry {
   isExpanded?: boolean
 }
 
-export default function Explorer({ directory, onFileSelect, selectedFilePath, gitStatus = [], filter, onFilterChange }: ExplorerProps) {
+interface SearchTreeNode {
+  name: string
+  path: string
+  children: SearchTreeNode[]
+  results: SearchResult[]
+}
+
+// Inline SVG icons
+const FileTreeIcon = ({ className }: { className?: string }) => (
+  <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M1.5 1h3l1 1H14v11H1.5V1zm1 1v10h10V3H5.5l-1-1H2.5z" />
+    <path d="M4 6h8v1H4zm0 2h6v1H4z" />
+  </svg>
+)
+
+const SourceControlIcon = ({ className }: { className?: string }) => (
+  <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="18" cy="18" r="3" />
+    <circle cx="6" cy="6" r="3" />
+    <path d="M6 21V9a9 9 0 0 0 9 9" />
+  </svg>
+)
+
+const SearchIcon = ({ className }: { className?: string }) => (
+  <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
+  </svg>
+)
+
+// Status letter badge
+const StatusBadge = ({ status }: { status: string }) => {
+  const letter = status.charAt(0).toUpperCase()
+  let color = 'text-text-secondary'
+  switch (status) {
+    case 'modified': color = 'text-yellow-400'; break
+    case 'added': color = 'text-green-400'; break
+    case 'deleted': color = 'text-red-400'; break
+    case 'untracked': color = 'text-gray-400'; break
+    case 'renamed': color = 'text-blue-400'; break
+  }
+  return <span className={`text-xs font-mono ${color}`}>{letter}</span>
+}
+
+const getStatusColor = (status?: string): string => {
+  switch (status) {
+    case 'modified': return 'text-yellow-400'
+    case 'added': return 'text-green-400'
+    case 'deleted': return 'text-red-400'
+    case 'untracked': return 'text-gray-400'
+    case 'renamed': return 'text-blue-400'
+    default: return 'text-text-primary'
+  }
+}
+
+export default function Explorer({
+  directory,
+  onFileSelect,
+  selectedFilePath,
+  gitStatus = [],
+  syncStatus,
+  filter,
+  onFilterChange,
+  onGitStatusRefresh,
+}: ExplorerProps) {
   const [tree, setTree] = useState<TreeNode[]>([])
-  const [allModeExpandedPaths, setAllModeExpandedPaths] = useState<Set<string>>(new Set())
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
 
-  // Build a set of paths that have changes (for quick lookup)
-  const changedPaths = useMemo(() => {
-    const paths = new Set<string>()
-    for (const status of gitStatus) {
-      // Add the file path
-      paths.add(status.path)
-      // Add all parent directories
-      const parts = status.path.split('/')
-      for (let i = 1; i < parts.length; i++) {
-        paths.add(parts.slice(0, i).join('/'))
-      }
-    }
-    return paths
-  }, [gitStatus])
+  // Context menu state for inline creation
+  const [inlineInput, setInlineInput] = useState<{ parentPath: string; type: 'file' | 'folder' } | null>(null)
+  const [inlineInputValue, setInlineInputValue] = useState('')
+  const inlineInputRef = useRef<HTMLInputElement>(null)
+
+  // Source control state
+  const [commitMessage, setCommitMessage] = useState('')
+  const [isCommitting, setIsCommitting] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [collapsedSearchGroups, setCollapsedSearchGroups] = useState<Set<string>>(new Set())
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load directory contents
   const loadDirectory = useCallback(async (dirPath: string): Promise<TreeNode[]> => {
@@ -53,14 +120,12 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
   const refreshTree = useCallback(async () => {
     if (!directory) return
 
-    // Reload root
     const newEntries = await loadDirectory(directory)
 
-    // Recursively reload children for expanded directories
     const reloadChildren = async (nodes: TreeNode[]): Promise<TreeNode[]> => {
       const result: TreeNode[] = []
       for (const node of nodes) {
-        if (node.isDirectory && allModeExpandedPaths.has(node.path)) {
+        if (node.isDirectory && expandedPaths.has(node.path)) {
           const children = await loadDirectory(node.path)
           const loadedChildren = await reloadChildren(children)
           result.push({ ...node, children: loadedChildren })
@@ -73,7 +138,7 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
 
     const refreshedTree = await reloadChildren(newEntries)
     setTree(refreshedTree)
-  }, [directory, loadDirectory, allModeExpandedPaths])
+  }, [directory, loadDirectory, expandedPaths])
 
   // Load root directory
   useEffect(() => {
@@ -95,7 +160,6 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
 
     const watcherId = `explorer-${directory}`
 
-    // Debounce refresh to avoid rapid successive updates
     let refreshTimeout: ReturnType<typeof setTimeout> | null = null
     const debouncedRefresh = () => {
       if (refreshTimeout) clearTimeout(refreshTimeout)
@@ -104,10 +168,7 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
       }, 500)
     }
 
-    // Start watching
     window.fs.watch(watcherId, directory)
-
-    // Listen for changes
     const removeListener = window.fs.onChange(watcherId, () => {
       debouncedRefresh()
     })
@@ -119,93 +180,44 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
     }
   }, [directory, refreshTree])
 
-  // Auto-expand directories with changes in "changed" mode
+  // Focus inline input when it appears
   useEffect(() => {
-    if (filter !== 'changed' || !directory || gitStatus.length === 0) return
+    if (inlineInput && inlineInputRef.current) {
+      inlineInputRef.current.focus()
+    }
+  }, [inlineInput])
 
-    const expandChangedDirs = async () => {
-      // Get all directory paths that contain changes
-      const dirsToExpand = new Set<string>()
-      for (const status of gitStatus) {
-        const parts = status.path.split('/')
-        let currentPath = directory
-        for (let i = 0; i < parts.length - 1; i++) {
-          currentPath = `${currentPath}/${parts[i]}`
-          dirsToExpand.add(currentPath)
-        }
-      }
+  // Search debounce
+  useEffect(() => {
+    if (filter !== 'search' || !directory) return
 
-      // Load children for all directories that need expansion
-      const loadChildrenRecursive = async (nodes: TreeNode[]): Promise<TreeNode[]> => {
-        const result: TreeNode[] = []
-        for (const node of nodes) {
-          if (node.isDirectory && dirsToExpand.has(node.path)) {
-            const children = node.children || await loadDirectory(node.path)
-            const loadedChildren = await loadChildrenRecursive(children)
-            result.push({ ...node, children: loadedChildren })
-          } else {
-            result.push(node)
-          }
-        }
-        return result
-      }
-
-      if (tree.length > 0) {
-        const expandedTree = await loadChildrenRecursive(tree)
-        setTree(expandedTree)
-      }
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
     }
 
-    expandChangedDirs()
-  }, [filter, directory, gitStatus, tree.length > 0])
-
-  // Check if a path should be expanded
-  const isExpanded = useCallback((path: string): boolean => {
-    if (filter === 'changed') {
-      // In changed mode, expand if this directory contains changes
-      const relativePath = directory ? path.replace(directory + '/', '') : path
-      return changedPaths.has(relativePath)
+    if (searchQuery.length < 2) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
     }
-    // In all mode, use remembered expansion state
-    return allModeExpandedPaths.has(path)
-  }, [filter, directory, changedPaths, allModeExpandedPaths])
 
-  // Toggle directory expansion (only affects "all" mode)
-  const toggleExpand = async (node: TreeNode) => {
-    if (!node.isDirectory) return
-
-    if (filter === 'all') {
-      const newExpanded = new Set(allModeExpandedPaths)
-      if (allModeExpandedPaths.has(node.path)) {
-        newExpanded.delete(node.path)
-      } else {
-        newExpanded.add(node.path)
-        // Load children if not already loaded
-        if (!node.children) {
-          const children = await loadDirectory(node.path)
-          setTree((prevTree) => updateTreeNode(prevTree, node.path, { children }))
-        }
+    setIsSearching(true)
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await window.fs.search(directory, searchQuery)
+        setSearchResults(results)
+      } catch {
+        setSearchResults([])
       }
-      setAllModeExpandedPaths(newExpanded)
-    } else {
-      // In changed mode, just load children if needed
-      if (!node.children) {
-        const children = await loadDirectory(node.path)
-        setTree((prevTree) => updateTreeNode(prevTree, node.path, { children }))
+      setIsSearching(false)
+    }, 300)
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
       }
     }
-  }
-
-  // Handle file click
-  const handleFileClick = (node: TreeNode) => {
-    if (node.isDirectory) {
-      toggleExpand(node)
-    } else if (onFileSelect) {
-      // Open in diff mode if clicked from "changed" filter
-      const openInDiffMode = filter === 'changed'
-      onFileSelect(node.path, openInDiffMode)
-    }
-  }
+  }, [searchQuery, directory, filter])
 
   // Update a node in the tree
   const updateTreeNode = (
@@ -224,46 +236,204 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
     })
   }
 
+  // Toggle directory expansion
+  const toggleExpand = async (node: TreeNode) => {
+    if (!node.isDirectory) return
+
+    const newExpanded = new Set(expandedPaths)
+    if (expandedPaths.has(node.path)) {
+      newExpanded.delete(node.path)
+    } else {
+      newExpanded.add(node.path)
+      if (!node.children) {
+        const children = await loadDirectory(node.path)
+        setTree((prevTree) => updateTreeNode(prevTree, node.path, { children }))
+      }
+    }
+    setExpandedPaths(newExpanded)
+  }
+
+  // Handle file click
+  const handleFileClick = (node: TreeNode) => {
+    if (node.isDirectory) {
+      toggleExpand(node)
+    } else if (onFileSelect) {
+      onFileSelect(node.path, false)
+    }
+  }
+
   // Get git status for a file
   const getFileStatus = (filePath: string): GitFileStatus | undefined => {
     const relativePath = directory ? filePath.replace(directory + '/', '') : filePath
     return gitStatus.find((s) => s.path === relativePath)
   }
 
-  // Get status color
-  const getStatusColor = (status?: string): string => {
-    switch (status) {
-      case 'modified':
-        return 'text-yellow-400'
-      case 'added':
-        return 'text-green-400'
-      case 'deleted':
-        return 'text-red-400'
-      case 'untracked':
-        return 'text-gray-400'
-      default:
-        return 'text-text-primary'
+  // Context menu handler
+  const handleContextMenu = async (e: React.MouseEvent, parentPath: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const result = await window.menu.popup([
+      { id: 'new-file', label: 'New File' },
+      { id: 'new-folder', label: 'New Folder' },
+    ])
+
+    if (result === 'new-file' || result === 'new-folder') {
+      // Make sure the parent directory is expanded
+      if (parentPath !== directory) {
+        const newExpanded = new Set(expandedPaths)
+        newExpanded.add(parentPath)
+        setExpandedPaths(newExpanded)
+
+        // Load children if needed
+        const node = findNode(tree, parentPath)
+        if (node && !node.children) {
+          const children = await loadDirectory(parentPath)
+          setTree((prevTree) => updateTreeNode(prevTree, parentPath, { children }))
+        }
+      }
+
+      setInlineInput({ parentPath, type: result === 'new-file' ? 'file' : 'folder' })
+      setInlineInputValue('')
     }
   }
 
-  // Check if a node or any of its children have changes
-  const hasChanges = (node: TreeNode): boolean => {
-    const relativePath = directory ? node.path.replace(directory + '/', '') : node.path
-    if (changedPaths.has(relativePath)) return true
-    if (node.children) {
-      return node.children.some(hasChanges)
+  // Find a node in the tree
+  const findNode = (nodes: TreeNode[], path: string): TreeNode | null => {
+    for (const node of nodes) {
+      if (node.path === path) return node
+      if (node.children) {
+        const found = findNode(node.children, path)
+        if (found) return found
+      }
     }
-    // For unexpanded directories, check if any git status paths start with this directory
-    if (node.isDirectory && !node.children) {
-      return gitStatus.some(s => s.path.startsWith(relativePath + '/'))
-    }
-    return false
+    return null
   }
 
+  // Submit inline input
+  const submitInlineInput = async () => {
+    if (!inlineInput || !inlineInputValue.trim() || !directory) {
+      setInlineInput(null)
+      return
+    }
+
+    const fullPath = `${inlineInput.parentPath}/${inlineInputValue.trim()}`
+
+    if (inlineInput.type === 'folder') {
+      await window.fs.mkdir(fullPath)
+    } else {
+      await window.fs.createFile(fullPath)
+    }
+
+    setInlineInput(null)
+    setInlineInputValue('')
+    // File watcher will handle refresh
+  }
+
+  // Source control computed values
+  const stagedFiles = useMemo(() => gitStatus.filter(f => f.staged), [gitStatus])
+  const unstagedFiles = useMemo(() => gitStatus.filter(f => !f.staged), [gitStatus])
+
+  // Search results as a file tree
+  const searchTree = useMemo((): SearchTreeNode => {
+    const root: SearchTreeNode = { name: '', path: '', children: [], results: [] }
+
+    for (const result of searchResults) {
+      const parts = result.relativePath.split('/')
+      let current = root
+
+      // Navigate/create folder nodes for all parts except the last (filename)
+      for (let i = 0; i < parts.length - 1; i++) {
+        const folderName = parts[i]
+        let child = current.children.find(c => c.name === folderName)
+        if (!child) {
+          child = {
+            name: folderName,
+            path: parts.slice(0, i + 1).join('/'),
+            children: [],
+            results: [],
+          }
+          current.children.push(child)
+        }
+        current = child
+      }
+
+      current.results.push(result)
+    }
+
+    return root
+  }, [searchResults])
+
+  const handleStage = async (filePath: string) => {
+    if (!directory) return
+    await window.git.stage(directory, filePath)
+    onGitStatusRefresh?.()
+  }
+
+  const handleUnstage = async (filePath: string) => {
+    if (!directory) return
+    await window.git.unstage(directory, filePath)
+    onGitStatusRefresh?.()
+  }
+
+  const handleCommit = async () => {
+    if (!directory || !commitMessage.trim() || stagedFiles.length === 0) return
+    setIsCommitting(true)
+    try {
+      const result = await window.git.commit(directory, commitMessage.trim())
+      if (result.success) {
+        setCommitMessage('')
+        onGitStatusRefresh?.()
+      }
+    } finally {
+      setIsCommitting(false)
+    }
+  }
+
+  const handleSync = async () => {
+    if (!directory) return
+    setIsSyncing(true)
+    try {
+      await window.git.pull(directory)
+      await window.git.push(directory)
+      onGitStatusRefresh?.()
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  // Render inline input at a given depth
+  const renderInlineInput = (parentPath: string, depth: number) => {
+    if (!inlineInput || inlineInput.parentPath !== parentPath) return null
+
+    return (
+      <div className="flex items-center gap-1 py-0.5 px-2" style={{ paddingLeft: `${depth * 16 + 8}px` }}>
+        <span className="text-text-secondary text-xs">
+          {inlineInput.type === 'folder' ? '+ Folder:' : '+ File:'}
+        </span>
+        <input
+          ref={inlineInputRef}
+          type="text"
+          value={inlineInputValue}
+          onChange={(e) => setInlineInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              submitInlineInput()
+            } else if (e.key === 'Escape') {
+              setInlineInput(null)
+            }
+          }}
+          onBlur={() => submitInlineInput()}
+          className="flex-1 bg-bg-tertiary border border-border rounded px-1 py-0.5 text-xs text-text-primary outline-none focus:border-accent min-w-0"
+          placeholder={inlineInput.type === 'folder' ? 'folder name' : 'filename'}
+        />
+      </div>
+    )
+  }
 
   // Render a tree node
   const renderNode = (node: TreeNode, depth: number = 0): JSX.Element => {
-    const nodeIsExpanded = isExpanded(node.path)
+    const nodeIsExpanded = expandedPaths.has(node.path)
     const status = getFileStatus(node.path)
     const statusColor = getStatusColor(status?.status)
     const isSelected = !node.isDirectory && node.path === selectedFilePath
@@ -272,6 +442,7 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
       <div key={node.path}>
         <div
           onClick={() => handleFileClick(node)}
+          onContextMenu={node.isDirectory ? (e) => handleContextMenu(e, node.path) : undefined}
           className={`flex items-center gap-2 py-1 px-2 rounded cursor-pointer ${statusColor} ${
             isSelected ? 'bg-accent/20 ring-1 ring-accent/50' : 'hover:bg-bg-tertiary'
           }`}
@@ -284,21 +455,247 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
           ) : (
             <span className="w-4" />
           )}
-          <span className={node.isDirectory ? 'text-text-secondary' : ''}>
-            {node.isDirectory ? '📁' : '📄'}
-          </span>
           <span className="truncate">{node.name}</span>
           {status && (
-            <span className="text-xs opacity-60 ml-auto">
-              {status.status.charAt(0).toUpperCase()}
+            <span className="ml-auto">
+              <StatusBadge status={status.status} />
             </span>
           )}
         </div>
-        {node.isDirectory && nodeIsExpanded && node.children && (
+        {node.isDirectory && nodeIsExpanded && (
           <div>
-            {node.children.map((child) => renderNode(child, depth + 1))}
+            {renderInlineInput(node.path, depth + 1)}
+            {node.children && node.children.map((child) => renderNode(child, depth + 1))}
           </div>
         )}
+      </div>
+    )
+  }
+
+  // Render source control tab
+  const renderSourceControl = () => {
+    if (!directory) return null
+
+    const hasChanges = gitStatus.length > 0
+
+    if (!hasChanges) {
+      // No changes: show sync view
+      return (
+        <div className="flex flex-col h-full items-center justify-center gap-3 p-4">
+          {syncStatus?.tracking && (
+            <div className="text-xs text-text-secondary text-center">
+              <span>{syncStatus.current} &rarr; {syncStatus.tracking}</span>
+              {(syncStatus.ahead > 0 || syncStatus.behind > 0) && (
+                <span className="ml-2">
+                  {syncStatus.ahead > 0 && <span>&uarr;{syncStatus.ahead}</span>}
+                  {syncStatus.behind > 0 && <span className="ml-1">&darr;{syncStatus.behind}</span>}
+                </span>
+              )}
+            </div>
+          )}
+          <div className="text-xs text-text-secondary">No changes</div>
+          {syncStatus?.tracking && (
+            <button
+              onClick={handleSync}
+              disabled={isSyncing}
+              className="px-3 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 disabled:opacity-50"
+            >
+              {isSyncing ? 'Syncing...' : 'Sync Changes'}
+            </button>
+          )}
+        </div>
+      )
+    }
+
+    // Has changes: show commit view
+    return (
+      <div className="flex flex-col h-full">
+        {/* Commit area */}
+        <div className="px-3 py-2 border-b border-border">
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={commitMessage}
+              onChange={(e) => setCommitMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCommit()
+              }}
+              placeholder="Commit message"
+              className="flex-1 bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-accent min-w-0"
+            />
+            <button
+              onClick={handleCommit}
+              disabled={isCommitting || stagedFiles.length === 0 || !commitMessage.trim()}
+              className="px-2 py-1 text-xs rounded bg-accent text-white hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            >
+              {isCommitting ? '...' : 'Commit'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto text-sm">
+          {/* Staged Changes */}
+          <div className="px-3 py-1.5 text-xs font-medium text-text-secondary uppercase tracking-wide bg-bg-secondary">
+            Staged Changes ({stagedFiles.length})
+          </div>
+          {stagedFiles.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-text-secondary">No staged changes</div>
+          ) : (
+            stagedFiles.map((file) => (
+              <div
+                key={`staged-${file.path}`}
+                className="flex items-center gap-2 px-3 py-1 hover:bg-bg-tertiary cursor-pointer group"
+                onClick={() => {
+                  if (onFileSelect && directory) {
+                    onFileSelect(`${directory}/${file.path}`, true)
+                  }
+                }}
+              >
+                <span className={`truncate flex-1 text-xs ${getStatusColor(file.status)}`}>
+                  {file.path}
+                </span>
+                <StatusBadge status={file.status} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleUnstage(file.path)
+                  }}
+                  className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-text-primary text-xs px-1"
+                  title="Unstage"
+                >
+                  -
+                </button>
+              </div>
+            ))
+          )}
+
+          {/* Changes */}
+          <div className="px-3 py-1.5 text-xs font-medium text-text-secondary uppercase tracking-wide bg-bg-secondary mt-1">
+            Changes ({unstagedFiles.length})
+          </div>
+          {unstagedFiles.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-text-secondary">No changes</div>
+          ) : (
+            unstagedFiles.map((file) => (
+              <div
+                key={`unstaged-${file.path}`}
+                className="flex items-center gap-2 px-3 py-1 hover:bg-bg-tertiary cursor-pointer group"
+                onClick={() => {
+                  if (onFileSelect && directory) {
+                    onFileSelect(`${directory}/${file.path}`, true)
+                  }
+                }}
+              >
+                <span className={`truncate flex-1 text-xs ${getStatusColor(file.status)}`}>
+                  {file.path}
+                </span>
+                <StatusBadge status={file.status} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleStage(file.path)
+                  }}
+                  className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-text-primary text-xs px-1"
+                  title="Stage"
+                >
+                  +
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Render search tab
+  const renderSearch = () => {
+    const toggleGroup = (folder: string) => {
+      setCollapsedSearchGroups(prev => {
+        const next = new Set(prev)
+        if (next.has(folder)) {
+          next.delete(folder)
+        } else {
+          next.add(folder)
+        }
+        return next
+      })
+    }
+
+    const renderSearchTreeNode = (node: SearchTreeNode, depth: number): JSX.Element | null => {
+      const isCollapsed = collapsedSearchGroups.has(node.path)
+      const isRoot = node.path === ''
+
+      return (
+        <div key={node.path || 'search-root'}>
+          {!isRoot && (
+            <div
+              className="py-1 text-xs text-text-secondary cursor-pointer hover:bg-bg-tertiary flex items-center gap-1"
+              style={{ paddingLeft: `${depth * 16 + 8}px` }}
+              onClick={() => toggleGroup(node.path)}
+            >
+              <span className="w-3 text-center">{isCollapsed ? '▶' : '▼'}</span>
+              <span className="truncate">{node.name}</span>
+            </div>
+          )}
+          {(isRoot || !isCollapsed) && (
+            <>
+              {node.children.map(child => renderSearchTreeNode(child, isRoot ? depth : depth + 1))}
+              {node.results.map((result) => (
+                <div key={result.path}>
+                  <div
+                    className="py-1 hover:bg-bg-tertiary cursor-pointer flex items-center gap-2"
+                    style={{ paddingLeft: `${(isRoot ? depth : depth + 1) * 16 + 8}px` }}
+                    onClick={() => onFileSelect?.(result.path, false)}
+                  >
+                    <span className="w-3" />
+                    <span className="text-xs truncate text-text-primary">{result.name}</span>
+                    <span className="text-xs text-text-secondary opacity-60 ml-auto shrink-0 pr-2">
+                      {result.matchType === 'filename' ? 'name' : 'content'}
+                    </span>
+                  </div>
+                  {result.contentMatches.map((match, i) => (
+                    <div
+                      key={`${result.path}-${match.line}-${i}`}
+                      className="py-0.5 hover:bg-bg-tertiary cursor-pointer text-xs text-text-secondary"
+                      style={{ paddingLeft: `${(isRoot ? depth : depth + 1) * 16 + 28}px` }}
+                      onClick={() => onFileSelect?.(result.path, false)}
+                    >
+                      <span className="text-text-secondary opacity-60 mr-2">{match.line}:</span>
+                      <span className="text-text-primary">{match.text}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-3 py-2 border-b border-border">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files..."
+            className="w-full bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto text-sm">
+          {isSearching && (
+            <div className="px-3 py-4 text-xs text-text-secondary text-center">Searching...</div>
+          )}
+          {!isSearching && searchQuery.length >= 2 && searchResults.length === 0 && (
+            <div className="px-3 py-4 text-xs text-text-secondary text-center">No results found</div>
+          )}
+          {!isSearching && searchQuery.length < 2 && searchQuery.length > 0 && (
+            <div className="px-3 py-4 text-xs text-text-secondary text-center">Type at least 2 characters</div>
+          )}
+          {!isSearching && searchResults.length > 0 && renderSearchTreeNode(searchTree, 0)}
+        </div>
       </div>
     )
   }
@@ -311,7 +708,7 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
     )
   }
 
-  if (isLoading) {
+  if (isLoading && filter === 'files') {
     return (
       <div className="h-full flex items-center justify-center text-text-secondary text-sm">
         Loading...
@@ -319,64 +716,70 @@ export default function Explorer({ directory, onFileSelect, selectedFilePath, gi
     )
   }
 
-  // Filter the tree based on the current filter
-  const filterTree = (nodes: TreeNode[]): TreeNode[] => {
-    if (filter === 'all') return nodes
-    return nodes
-      .filter(node => hasChanges(node))
-      .map(node => {
-        if (node.children) {
-          return { ...node, children: filterTree(node.children) }
-        }
-        return node
-      })
-  }
-
-  const filteredTree = filterTree(tree)
-
   return (
     <div className="h-full flex flex-col">
-      <div className="p-3 border-b border-border flex items-center justify-between">
+      {/* Tab bar */}
+      <div className="px-3 py-2 border-b border-border flex items-center justify-between">
         <span className="text-sm font-medium text-text-primary">Explorer</span>
-        {/* Filter selector */}
         <div className="flex items-center gap-1">
           <button
-            onClick={() => onFilterChange('all')}
-            className={`px-2 py-0.5 text-xs rounded transition-colors ${
-              filter === 'all'
+            onClick={() => onFilterChange('files')}
+            className={`p-1 rounded transition-colors ${
+              filter === 'files'
                 ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
             }`}
+            title="Files"
           >
-            All
+            <FileTreeIcon />
           </button>
           <button
-            onClick={() => onFilterChange('changed')}
-            className={`px-2 py-0.5 text-xs rounded transition-colors ${
-              filter === 'changed'
+            onClick={() => onFilterChange('source-control')}
+            className={`p-1 rounded transition-colors ${
+              filter === 'source-control'
                 ? 'bg-accent text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
             }`}
+            title="Source Control"
           >
-            Changed
-            {gitStatus.length > 0 && (
-              <span className="ml-1 opacity-70">({gitStatus.length})</span>
-            )}
+            <SourceControlIcon />
+          </button>
+          <button
+            onClick={() => onFilterChange('search')}
+            className={`p-1 rounded transition-colors ${
+              filter === 'search'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+            }`}
+            title="Search"
+          >
+            <SearchIcon />
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-2 text-sm">
-        <div className="text-text-secondary mb-2 px-2 truncate text-xs">
-          {directory}
-        </div>
-        {filteredTree.length === 0 ? (
-          <div className="text-center text-text-secondary text-sm py-4">
-            {filter === 'changed' ? 'No changes' : 'Empty directory'}
+
+      {/* Tab content */}
+      {filter === 'files' && (
+        <div className="flex-1 overflow-y-auto p-2 text-sm">
+          <div
+            className="text-text-secondary mb-2 px-2 truncate text-xs cursor-context-menu"
+            onContextMenu={(e) => handleContextMenu(e, directory)}
+          >
+            {directory}
           </div>
-        ) : (
-          filteredTree.map((node) => renderNode(node))
-        )}
-      </div>
+          {renderInlineInput(directory, 0)}
+          {tree.length === 0 ? (
+            <div className="text-center text-text-secondary text-sm py-4">
+              Empty directory
+            </div>
+          ) : (
+            tree.map((node) => renderNode(node))
+          )}
+        </div>
+      )}
+
+      {filter === 'source-control' && renderSourceControl()}
+      {filter === 'search' && renderSearch()}
     </div>
   )
 }

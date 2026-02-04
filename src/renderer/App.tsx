@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import type { GitFileStatus } from '../preload/index'
+import type { GitFileStatus, GitStatusResult } from '../preload/index'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
 import Terminal from './components/Terminal'
@@ -54,7 +54,7 @@ function AppContent() {
   const { addError } = useErrorStore()
 
   const [pendingFolderPath, setPendingFolderPath] = useState<string | null>(null)
-  const [gitStatusBySession, setGitStatusBySession] = useState<Record<string, GitFileStatus[]>>({})
+  const [gitStatusBySession, setGitStatusBySession] = useState<Record<string, GitStatusResult>>({})
   const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
   const [openFileInDiffMode, setOpenFileInDiffMode] = useState(false)
   const [showPanelPicker, setShowPanelPicker] = useState(false)
@@ -90,19 +90,57 @@ function AppContent() {
     }
   }, [sessions])
 
+  // Normalize git status response - handles both old array format and new object format
+  const normalizeGitStatus = useCallback((status: unknown): GitStatusResult => {
+    // New format: object with files array
+    if (status && typeof status === 'object' && !Array.isArray(status) && 'files' in status) {
+      const s = status as GitStatusResult
+      return {
+        files: (s.files || []).map(f => ({
+          ...f,
+          staged: f.staged ?? false,
+          indexStatus: f.indexStatus ?? ' ',
+          workingDirStatus: f.workingDirStatus ?? ' ',
+        })),
+        ahead: s.ahead ?? 0,
+        behind: s.behind ?? 0,
+        tracking: s.tracking ?? null,
+        current: s.current ?? null,
+      }
+    }
+    // Old format: flat array of {path, status}
+    if (Array.isArray(status)) {
+      return {
+        files: status.map((f: GitFileStatus) => ({
+          path: f.path,
+          status: f.status,
+          staged: f.staged ?? false,
+          indexStatus: f.indexStatus ?? ' ',
+          workingDirStatus: f.workingDirStatus ?? ' ',
+        })),
+        ahead: 0,
+        behind: 0,
+        tracking: null,
+        current: null,
+      }
+    }
+    return { files: [], ahead: 0, behind: 0, tracking: null, current: null }
+  }, [])
+
   // Fetch git status for active session
   const fetchGitStatus = useCallback(async () => {
     if (!activeSession) return
     try {
       const status = await window.git.status(activeSession.directory)
+      const normalized = normalizeGitStatus(status)
       setGitStatusBySession(prev => ({
         ...prev,
-        [activeSession.id]: status
+        [activeSession.id]: normalized
       }))
     } catch {
       // Ignore errors
     }
-  }, [activeSession?.id, activeSession?.directory])
+  }, [activeSession?.id, activeSession?.directory, normalizeGitStatus])
 
   // Poll git status every 2 seconds
   useEffect(() => {
@@ -116,14 +154,16 @@ function AppContent() {
   // Get git status for the selected file
   const selectedFileStatus = React.useMemo(() => {
     if (!activeSession?.selectedFilePath || !activeSession?.directory) return null
-    const status = gitStatusBySession[activeSession.id] || []
+    const statusResult = gitStatusBySession[activeSession.id]
+    const files = statusResult?.files || []
     const relativePath = activeSession.selectedFilePath.replace(activeSession.directory + '/', '')
-    const fileStatus = status.find(s => s.path === relativePath)
+    const fileStatus = files.find(s => s.path === relativePath)
     return fileStatus?.status ?? null
   }, [activeSession?.selectedFilePath, activeSession?.directory, activeSession?.id, gitStatusBySession])
 
-  // Get current git status list for the active session
-  const activeSessionGitStatus = activeSession ? (gitStatusBySession[activeSession.id] || []) : []
+  // Get current git status for the active session
+  const activeSessionGitStatusResult = activeSession ? (gitStatusBySession[activeSession.id] || null) : null
+  const activeSessionGitStatus = activeSessionGitStatusResult?.files || []
 
   // Load sessions and agents on mount
   useEffect(() => {
@@ -393,8 +433,10 @@ function AppContent() {
         }}
         selectedFilePath={activeSession?.selectedFilePath}
         gitStatus={activeSessionGitStatus}
-        filter={activeSession?.explorerFilter ?? 'all'}
+        syncStatus={activeSessionGitStatusResult}
+        filter={activeSession?.explorerFilter ?? 'files'}
         onFilterChange={(filter) => activeSessionId && setExplorerFilter(activeSessionId, filter)}
+        onGitStatusRefresh={fetchGitStatus}
       />
     ) : null,
     [PANEL_IDS.FILE_VIEWER]: activeSession?.showFileViewer ? (
@@ -417,6 +459,7 @@ function AppContent() {
     activeSessionId,
     activeSession,
     activeSessionGitStatus,
+    activeSessionGitStatusResult,
     selectedFileStatus,
     openFileInDiffMode,
     globalPanelVisibility,

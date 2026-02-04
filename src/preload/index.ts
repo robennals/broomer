@@ -49,6 +49,25 @@ export type FileEntry = {
 export type GitFileStatus = {
   path: string
   status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
+  staged: boolean
+  indexStatus: string
+  workingDirStatus: string
+}
+
+export type GitStatusResult = {
+  files: GitFileStatus[]
+  ahead: number
+  behind: number
+  tracking: string | null
+  current: string | null
+}
+
+export type SearchResult = {
+  path: string
+  name: string
+  relativePath: string
+  matchType: 'filename' | 'content'
+  contentMatches: { line: number; text: string }[]
 }
 
 export type FsApi = {
@@ -58,6 +77,9 @@ export type FsApi = {
   appendFile: (path: string, content: string) => Promise<{ success: boolean; error?: string }>
   readFileBase64: (path: string) => Promise<string>
   exists: (path: string) => Promise<boolean>
+  mkdir: (path: string) => Promise<{ success: boolean; error?: string }>
+  createFile: (path: string) => Promise<{ success: boolean; error?: string }>
+  search: (directory: string, query: string) => Promise<SearchResult[]>
   watch: (id: string, path: string) => Promise<{ success: boolean; error?: string }>
   unwatch: (id: string) => Promise<{ success: boolean }>
   onChange: (id: string, callback: (event: { eventType: string; filename: string | null }) => void) => () => void
@@ -66,9 +88,14 @@ export type FsApi = {
 export type GitApi = {
   getBranch: (path: string) => Promise<string>
   isGitRepo: (path: string) => Promise<boolean>
-  status: (path: string) => Promise<GitFileStatus[]>
+  status: (path: string) => Promise<GitStatusResult>
   diff: (repoPath: string, filePath?: string) => Promise<string>
   show: (repoPath: string, filePath: string, ref?: string) => Promise<string>
+  stage: (repoPath: string, filePath: string) => Promise<{ success: boolean; error?: string }>
+  unstage: (repoPath: string, filePath: string) => Promise<{ success: boolean; error?: string }>
+  commit: (repoPath: string, message: string) => Promise<{ success: boolean; error?: string }>
+  push: (repoPath: string) => Promise<{ success: boolean; error?: string }>
+  pull: (repoPath: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export type AgentData = {
@@ -103,7 +130,7 @@ export type SessionData = {
   showDiff?: boolean
   fileViewerPosition?: 'top' | 'left'
   layoutSizes?: LayoutSizesData
-  explorerFilter?: 'all' | 'changed'
+  explorerFilter?: 'all' | 'changed' | 'files' | 'source-control' | 'search'
 }
 
 export type ConfigData = {
@@ -147,6 +174,9 @@ const fsApi: FsApi = {
   appendFile: (path, content) => ipcRenderer.invoke('fs:appendFile', path, content),
   readFileBase64: (path) => ipcRenderer.invoke('fs:readFileBase64', path),
   exists: (path) => ipcRenderer.invoke('fs:exists', path),
+  mkdir: (path) => ipcRenderer.invoke('fs:mkdir', path),
+  createFile: (path) => ipcRenderer.invoke('fs:createFile', path),
+  search: (directory, query) => ipcRenderer.invoke('fs:search', directory, query),
   watch: (id, path) => ipcRenderer.invoke('fs:watch', id, path),
   unwatch: (id) => ipcRenderer.invoke('fs:unwatch', id),
   onChange: (id, callback) => {
@@ -162,6 +192,11 @@ const gitApi: GitApi = {
   status: (path) => ipcRenderer.invoke('git:status', path),
   diff: (repoPath, filePath) => ipcRenderer.invoke('git:diff', repoPath, filePath),
   show: (repoPath, filePath, ref) => ipcRenderer.invoke('git:show', repoPath, filePath, ref),
+  stage: (repoPath, filePath) => ipcRenderer.invoke('git:stage', repoPath, filePath),
+  unstage: (repoPath, filePath) => ipcRenderer.invoke('git:unstage', repoPath, filePath),
+  commit: (repoPath, message) => ipcRenderer.invoke('git:commit', repoPath, message),
+  push: (repoPath) => ipcRenderer.invoke('git:push', repoPath),
+  pull: (repoPath) => ipcRenderer.invoke('git:pull', repoPath),
 }
 
 const configApi: ConfigApi = {

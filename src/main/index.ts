@@ -420,36 +420,126 @@ ipcMain.handle('git:isGitRepo', async (_event, dirPath: string) => {
 ipcMain.handle('git:status', async (_event, repoPath: string) => {
   // In E2E test mode, return mock status
   if (isE2ETest) {
-    return [
-      { path: 'src/index.ts', status: 'modified' },
-      { path: 'README.md', status: 'modified' },
-    ]
+    return {
+      files: [
+        { path: 'src/index.ts', status: 'modified', staged: false, indexStatus: ' ', workingDirStatus: 'M' },
+        { path: 'README.md', status: 'modified', staged: false, indexStatus: ' ', workingDirStatus: 'M' },
+      ],
+      ahead: 0,
+      behind: 0,
+      tracking: null,
+      current: E2E_MOCK_BRANCHES[repoPath] || 'main',
+    }
   }
 
   try {
     const git = simpleGit(repoPath)
     const status = await git.status()
-    const files: { path: string; status: string }[] = []
+    const files: { path: string; status: string; staged: boolean; indexStatus: string; workingDirStatus: string }[] = []
 
-    for (const file of status.modified) {
-      files.push({ path: file, status: 'modified' })
-    }
-    for (const file of status.created) {
-      files.push({ path: file, status: 'added' })
-    }
-    for (const file of status.deleted) {
-      files.push({ path: file, status: 'deleted' })
-    }
-    for (const file of status.renamed) {
-      files.push({ path: file.to, status: 'renamed' })
-    }
-    for (const file of status.not_added) {
-      files.push({ path: file, status: 'untracked' })
+    for (const file of status.files) {
+      const indexStatus = file.index || ' '
+      const workingDirStatus = file.working_dir || ' '
+      const staged = indexStatus !== ' ' && indexStatus !== '?'
+
+      let fileStatus = 'modified'
+      // Determine status from the most relevant field
+      const relevantChar = staged ? indexStatus : workingDirStatus
+      switch (relevantChar) {
+        case 'M': fileStatus = 'modified'; break
+        case 'A': fileStatus = 'added'; break
+        case 'D': fileStatus = 'deleted'; break
+        case 'R': fileStatus = 'renamed'; break
+        case '?': fileStatus = 'untracked'; break
+        default: fileStatus = 'modified'
+      }
+
+      files.push({ path: file.path, status: fileStatus, staged, indexStatus, workingDirStatus })
     }
 
-    return files
+    return {
+      files,
+      ahead: status.ahead,
+      behind: status.behind,
+      tracking: status.tracking,
+      current: status.current,
+    }
   } catch {
-    return []
+    return { files: [], ahead: 0, behind: 0, tracking: null, current: null }
+  }
+})
+
+ipcMain.handle('git:stage', async (_event, repoPath: string, filePath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    await git.add([filePath])
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:unstage', async (_event, repoPath: string, filePath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    await git.reset(['HEAD', '--', filePath])
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:commit', async (_event, repoPath: string, message: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  if (!message || message.trim() === '') {
+    return { success: false, error: 'Commit message cannot be empty' }
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    await git.commit(message)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:push', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    await git.push()
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:pull', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    await git.pull()
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
   }
 })
 
@@ -581,6 +671,113 @@ ipcMain.handle('fs:appendFile', async (_event, filePath: string, content: string
 
 ipcMain.handle('fs:exists', async (_event, filePath: string) => {
   return existsSync(filePath)
+})
+
+ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    if (existsSync(dirPath)) {
+      return { success: false, error: 'Directory already exists' }
+    }
+    mkdirSync(dirPath, { recursive: true })
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('fs:createFile', async (_event, filePath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    if (existsSync(filePath)) {
+      return { success: false, error: 'File already exists' }
+    }
+    writeFileSync(filePath, '')
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('fs:search', async (_event, dirPath: string, query: string) => {
+  if (isE2ETest) {
+    return []
+  }
+
+  const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.cache', 'dist', 'build', '__pycache__', '.venv', 'venv'])
+  const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.woff', '.woff2', '.ttf', '.eot', '.mp3', '.mp4', '.avi', '.mov', '.zip', '.tar', '.gz', '.rar', '.7z', '.pdf', '.exe', '.dll', '.so', '.dylib', '.o', '.a', '.bin', '.dat', '.db', '.sqlite'])
+  const MAX_RESULTS = 500
+  const MAX_CONTENT_MATCHES_PER_FILE = 5
+  const MAX_FILE_SIZE = 1024 * 1024 // 1MB
+
+  const results: { path: string; name: string; relativePath: string; matchType: 'filename' | 'content'; contentMatches: { line: number; text: string }[] }[] = []
+  const lowerQuery = query.toLowerCase()
+
+  const walkDir = (dir: string) => {
+    if (results.length >= MAX_RESULTS) return
+
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (results.length >= MAX_RESULTS) return
+
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue
+        walkDir(join(dir, entry.name))
+        continue
+      }
+
+      const filePath = join(dir, entry.name)
+      const relativePath = filePath.replace(dirPath + '/', '')
+      const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase()
+
+      // Check filename match
+      const filenameMatch = entry.name.toLowerCase().includes(lowerQuery)
+
+      // Check content match (skip binary files and large files)
+      const contentMatches: { line: number; text: string }[] = []
+      if (!BINARY_EXTENSIONS.has(ext)) {
+        try {
+          const stats = statSync(filePath)
+          if (stats.size <= MAX_FILE_SIZE) {
+            const content = readFileSync(filePath, 'utf-8')
+            const lines = content.split('\n')
+            for (let i = 0; i < lines.length && contentMatches.length < MAX_CONTENT_MATCHES_PER_FILE; i++) {
+              if (lines[i].toLowerCase().includes(lowerQuery)) {
+                contentMatches.push({ line: i + 1, text: lines[i].trim().substring(0, 200) })
+              }
+            }
+          }
+        } catch {
+          // Skip files that can't be read
+        }
+      }
+
+      if (filenameMatch || contentMatches.length > 0) {
+        results.push({
+          path: filePath,
+          name: entry.name,
+          relativePath,
+          matchType: filenameMatch ? 'filename' : 'content',
+          contentMatches,
+        })
+      }
+    }
+  }
+
+  walkDir(dirPath)
+  return results
 })
 
 ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
