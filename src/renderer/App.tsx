@@ -11,6 +11,7 @@ import NewSessionDialog from './components/NewSessionDialog'
 import PanelPicker from './components/PanelPicker'
 import { useSessionStore, type Session, type SessionStatus, type LayoutSizes } from './store/sessions'
 import { useAgentStore } from './store/agents'
+import { useRepoStore } from './store/repos'
 import { useErrorStore } from './store/errors'
 import { PanelProvider, PANEL_IDS } from './panels'
 import { terminalBufferRegistry } from './utils/terminalBufferRegistry'
@@ -51,9 +52,10 @@ function AppContent() {
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
+  const { loadRepos, checkGhAvailability } = useRepoStore()
   const { addError } = useErrorStore()
 
-  const [pendingFolderPath, setPendingFolderPath] = useState<string | null>(null)
+  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
   const [gitStatusBySession, setGitStatusBySession] = useState<Record<string, GitStatusResult>>({})
   const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
   const [openFileInDiffMode, setOpenFileInDiffMode] = useState(false)
@@ -165,11 +167,13 @@ function AppContent() {
   const activeSessionGitStatusResult = activeSession ? (gitStatusBySession[activeSession.id] || null) : null
   const activeSessionGitStatus = activeSessionGitStatusResult?.files || []
 
-  // Load sessions and agents on mount
+  // Load sessions, agents, and repos on mount
   useEffect(() => {
     loadSessions()
     loadAgents()
-  }, [loadSessions, loadAgents])
+    loadRepos()
+    checkGhAvailability()
+  }, [loadSessions, loadAgents, loadRepos, checkGhAvailability])
 
   // Mark session as read when it becomes active
   useEffect(() => {
@@ -223,26 +227,25 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleCopyTerminal)
   }, [activeSession])
 
-  const handleNewSession = async () => {
-    const folderPath = await window.dialog.openFolder()
-    if (folderPath) {
-      setPendingFolderPath(folderPath)
-    }
+  const handleNewSession = () => {
+    setShowNewSessionDialog(true)
   }
 
-  const handleAgentSelect = async (agentId: string | null) => {
-    if (pendingFolderPath) {
-      try {
-        await addSession(pendingFolderPath, agentId)
-      } catch (error) {
-        addError(`Failed to add session: ${error instanceof Error ? error.message : error}`)
-      }
-      setPendingFolderPath(null)
+  const handleNewSessionComplete = async (
+    directory: string,
+    agentId: string | null,
+    extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string }
+  ) => {
+    try {
+      await addSession(directory, agentId, extra)
+    } catch (error) {
+      addError(`Failed to add session: ${error instanceof Error ? error.message : error}`)
     }
+    setShowNewSessionDialog(false)
   }
 
   const handleCancelNewSession = () => {
-    setPendingFolderPath(null)
+    setShowNewSessionDialog(false)
   }
 
   // Memoize getAgentCommand to ensure stable values
@@ -498,10 +501,9 @@ function AppContent() {
       />
 
       {/* New Session Dialog */}
-      {pendingFolderPath && (
+      {showNewSessionDialog && (
         <NewSessionDialog
-          folderPath={pendingFolderPath}
-          onSelect={handleAgentSelect}
+          onComplete={handleNewSessionComplete}
           onCancel={handleCancelNewSession}
         />
       )}

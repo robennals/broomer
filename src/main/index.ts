@@ -1,9 +1,10 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import { join } from 'path'
 import { homedir } from 'os'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, openSync, closeSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, openSync, closeSync, chmodSync } from 'fs'
 import * as pty from 'node-pty'
 import simpleGit from 'simple-git'
+import { exec, execSync } from 'child_process'
 
 // Hooks events directory
 const HOOKS_EVENT_DIR = join(homedir(), '.agent-manager', 'hooks-events')
@@ -335,11 +336,19 @@ if (isE2ETest) {
   }
 }
 
+// Demo repos for E2E tests
+const E2E_DEMO_REPOS = [
+  { id: 'repo-1', name: 'demo-project', remoteUrl: 'git@github.com:user/demo-project.git', rootDir: '/tmp/e2e-repos/demo-project', defaultBranch: 'main' },
+]
+
+// Init scripts directory
+const INIT_SCRIPTS_DIR = join(homedir(), '.agent-manager', 'init-scripts')
+
 // Config IPC handlers
 ipcMain.handle('config:load', async () => {
   // In E2E test mode, return demo sessions for consistent testing
   if (isE2ETest) {
-    return { agents: DEFAULT_AGENTS, sessions: E2E_DEMO_SESSIONS }
+    return { agents: DEFAULT_AGENTS, sessions: E2E_DEMO_SESSIONS, repos: E2E_DEMO_REPOS, defaultCloneDir: '/tmp/e2e-repos' }
   }
 
   try {
@@ -358,7 +367,7 @@ ipcMain.handle('config:load', async () => {
   }
 })
 
-ipcMain.handle('config:save', async (_event, config: { agents?: unknown[]; sessions: unknown[] }) => {
+ipcMain.handle('config:save', async (_event, config: { agents?: unknown[]; sessions: unknown[]; repos?: unknown[]; defaultCloneDir?: string; showSidebar?: boolean; sidebarWidth?: number; toolbarPanels?: string[] }) => {
   // Don't save config during E2E tests to avoid polluting real config
   if (isE2ETest) {
     return { success: true }
@@ -368,11 +377,26 @@ ipcMain.handle('config:save', async (_event, config: { agents?: unknown[]; sessi
     if (!existsSync(CONFIG_DIR)) {
       mkdirSync(CONFIG_DIR, { recursive: true })
     }
-    // Ensure agents array exists
+    // Read existing config to preserve fields we don't explicitly set
+    let existingConfig: Record<string, unknown> = {}
+    if (existsSync(CONFIG_FILE)) {
+      try {
+        existingConfig = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'))
+      } catch {
+        // ignore
+      }
+    }
     const configToSave = {
+      ...existingConfig,
       agents: config.agents || DEFAULT_AGENTS,
       sessions: config.sessions,
     }
+    // Only overwrite these if provided
+    if (config.repos !== undefined) configToSave.repos = config.repos
+    if (config.defaultCloneDir !== undefined) configToSave.defaultCloneDir = config.defaultCloneDir
+    if (config.showSidebar !== undefined) configToSave.showSidebar = config.showSidebar
+    if (config.sidebarWidth !== undefined) configToSave.sidebarWidth = config.sidebarWidth
+    if (config.toolbarPanels !== undefined) configToSave.toolbarPanels = config.toolbarPanels
     writeFileSync(CONFIG_FILE, JSON.stringify(configToSave, null, 2))
     return { success: true }
   } catch (error) {
@@ -806,6 +830,7 @@ ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
 
 // App info IPC handlers
 ipcMain.handle('app:isDev', () => isDev)
+ipcMain.handle('app:homedir', () => homedir())
 
 // Hooks setup IPC handlers
 const HOOK_SCRIPT_PATH = isDev
@@ -948,6 +973,237 @@ ipcMain.handle('hooks:configure', async (_event, configDir?: string) => {
   } catch (error) {
     return { success: false, error: String(error) }
   }
+})
+
+// Git extended handlers
+ipcMain.handle('git:clone', async (_event, url: string, targetDir: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    await simpleGit().clone(url, expandHomePath(targetDir))
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:worktreeAdd', async (_event, repoPath: string, worktreePath: string, branchName: string, baseBranch: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    await git.raw(['worktree', 'add', '-b', branchName, expandHomePath(worktreePath), baseBranch])
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:worktreeList', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return [
+      { path: repoPath, branch: 'main', head: 'abc1234' },
+    ]
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    const raw = await git.raw(['worktree', 'list', '--porcelain'])
+    const worktrees: { path: string; branch: string; head: string }[] = []
+    let current: { path: string; branch: string; head: string } = { path: '', branch: '', head: '' }
+
+    for (const line of raw.split('\n')) {
+      if (line.startsWith('worktree ')) {
+        if (current.path) worktrees.push(current)
+        current = { path: line.slice(9), branch: '', head: '' }
+      } else if (line.startsWith('HEAD ')) {
+        current.head = line.slice(5)
+      } else if (line.startsWith('branch ')) {
+        // branch refs/heads/main -> main
+        current.branch = line.slice(7).replace('refs/heads/', '')
+      } else if (line === '' && current.path) {
+        worktrees.push(current)
+        current = { path: '', branch: '', head: '' }
+      }
+    }
+    if (current.path) worktrees.push(current)
+
+    return worktrees
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle('git:pushNewBranch', async (_event, repoPath: string, branchName: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    await git.push(['--set-upstream', 'origin', branchName])
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:defaultBranch', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return 'main'
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    // Try symbolic-ref first
+    try {
+      const ref = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD'])
+      return ref.trim().replace('refs/remotes/origin/', '')
+    } catch {
+      // Fallback: check if main or master exists
+      try {
+        await git.raw(['rev-parse', '--verify', 'main'])
+        return 'main'
+      } catch {
+        try {
+          await git.raw(['rev-parse', '--verify', 'master'])
+          return 'master'
+        } catch {
+          return 'main'
+        }
+      }
+    }
+  } catch {
+    return 'main'
+  }
+})
+
+ipcMain.handle('git:remoteUrl', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return 'git@github.com:user/demo-project.git'
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    const remotes = await git.getRemotes(true)
+    const origin = remotes.find(r => r.name === 'origin')
+    return origin?.refs?.fetch || null
+  } catch {
+    return null
+  }
+})
+
+// GitHub CLI handlers
+ipcMain.handle('gh:isInstalled', async () => {
+  if (isE2ETest) {
+    return true
+  }
+
+  try {
+    execSync('gh --version', { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('gh:issues', async (_event, repoDir: string) => {
+  if (isE2ETest) {
+    return [
+      { number: 42, title: 'Add user authentication', labels: ['feature', 'priority'], url: 'https://github.com/user/demo-project/issues/42' },
+      { number: 17, title: 'Fix login page crash', labels: ['bug'], url: 'https://github.com/user/demo-project/issues/17' },
+    ]
+  }
+
+  try {
+    const result = execSync('gh issue list --assignee @me --state open --json number,title,labels,url --limit 50', {
+      cwd: expandHomePath(repoDir),
+      encoding: 'utf-8',
+      timeout: 30000,
+    })
+    const issues = JSON.parse(result)
+    return issues.map((issue: { number: number; title: string; labels: Array<{ name: string }>; url: string }) => ({
+      number: issue.number,
+      title: issue.title,
+      labels: (issue.labels || []).map((l: { name: string }) => l.name),
+      url: issue.url,
+    }))
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle('gh:repoSlug', async (_event, repoDir: string) => {
+  if (isE2ETest) {
+    return 'user/demo-project'
+  }
+
+  try {
+    const result = execSync('gh repo view --json nameWithOwner --jq .nameWithOwner', {
+      cwd: expandHomePath(repoDir),
+      encoding: 'utf-8',
+      timeout: 15000,
+    })
+    return result.trim() || null
+  } catch {
+    return null
+  }
+})
+
+// Init script handlers
+ipcMain.handle('repos:getInitScript', async (_event, repoId: string) => {
+  if (isE2ETest) {
+    return '#!/bin/bash\necho "init script for E2E"'
+  }
+
+  try {
+    const scriptPath = join(INIT_SCRIPTS_DIR, `${repoId}.sh`)
+    if (!existsSync(scriptPath)) return null
+    return readFileSync(scriptPath, 'utf-8')
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('repos:saveInitScript', async (_event, repoId: string, script: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    if (!existsSync(INIT_SCRIPTS_DIR)) {
+      mkdirSync(INIT_SCRIPTS_DIR, { recursive: true })
+    }
+    const scriptPath = join(INIT_SCRIPTS_DIR, `${repoId}.sh`)
+    writeFileSync(scriptPath, script, 'utf-8')
+    chmodSync(scriptPath, 0o755)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+// Shell handler
+ipcMain.handle('shell:exec', async (_event, command: string, cwd: string) => {
+  if (isE2ETest) {
+    return { success: true, stdout: '', stderr: '', exitCode: 0 }
+  }
+
+  return new Promise<{ success: boolean; stdout: string; stderr: string; exitCode: number }>((resolve) => {
+    exec(command, { cwd: expandHomePath(cwd), shell: '/bin/bash', timeout: 300000 }, (error, stdout, stderr) => {
+      const exitCode = error ? (error as NodeJS.ErrnoException & { code?: number }).code || 1 : 0
+      resolve({
+        success: !error,
+        stdout: stdout || '',
+        stderr: stderr || '',
+        exitCode: typeof exitCode === 'number' ? exitCode : 1,
+      })
+    })
+  })
 })
 
 // Dialog IPC handlers

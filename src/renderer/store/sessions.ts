@@ -36,6 +36,9 @@ export interface Session {
   branch: string
   status: SessionStatus
   agentId: string | null
+  repoId?: string
+  issueNumber?: number
+  issueTitle?: string
   // Per-session UI state (persisted) - generic panel visibility
   panelVisibility: PanelVisibility
   // Legacy fields kept for backwards compat - computed from panelVisibility
@@ -103,7 +106,7 @@ interface SessionStore {
 
   // Actions
   loadSessions: () => Promise<void>
-  addSession: (directory: string, agentId: string | null) => Promise<void>
+  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string }) => Promise<void>
   removeSession: (id: string) => Promise<void>
   setActiveSession: (id: string | null) => void
   updateSessionBranch: (id: string, branch: string) => void
@@ -189,6 +192,9 @@ const debouncedSave = async (
         name: s.name,
         directory: s.directory,
         agentId: s.agentId,
+        repoId: s.repoId,
+        issueNumber: s.issueNumber,
+        issueTitle: s.issueTitle,
         // Save new panelVisibility format
         panelVisibility: s.panelVisibility,
         // Also save legacy fields for backwards compat
@@ -236,6 +242,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           branch,
           status: 'idle',
           agentId: sessionData.agentId ?? null,
+          repoId: sessionData.repoId,
+          issueNumber: sessionData.issueNumber,
+          issueTitle: sessionData.issueTitle,
           // New panel visibility system
           panelVisibility,
           // Legacy fields (synced from panelVisibility)
@@ -280,14 +289,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
   },
 
-  addSession: async (directory: string, agentId: string | null) => {
+  addSession: async (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string }) => {
     const isGitRepo = await window.git.isGitRepo(directory)
     if (!isGitRepo) {
       throw new Error('Selected directory is not a git repository')
     }
 
     const branch = await window.git.getBranch(directory)
-    const name = basename(directory)
+    const name = extra?.name || basename(directory)
     const id = generateId()
 
     const panelVisibility = { ...DEFAULT_PANEL_VISIBILITY }
@@ -298,6 +307,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       branch,
       status: 'idle',
       agentId,
+      ...extra,
       panelVisibility,
       showAgentTerminal: true,
       showUserTerminal: false,

@@ -85,6 +85,27 @@ export type FsApi = {
   onChange: (id: string, callback: (event: { eventType: string; filename: string | null }) => void) => () => void
 }
 
+export type ManagedRepo = {
+  id: string
+  name: string
+  remoteUrl: string
+  rootDir: string
+  defaultBranch: string
+}
+
+export type GitHubIssue = {
+  number: number
+  title: string
+  labels: string[]
+  url: string
+}
+
+export type WorktreeInfo = {
+  path: string
+  branch: string
+  head: string
+}
+
 export type GitApi = {
   getBranch: (path: string) => Promise<string>
   isGitRepo: (path: string) => Promise<boolean>
@@ -96,6 +117,27 @@ export type GitApi = {
   commit: (repoPath: string, message: string) => Promise<{ success: boolean; error?: string }>
   push: (repoPath: string) => Promise<{ success: boolean; error?: string }>
   pull: (repoPath: string) => Promise<{ success: boolean; error?: string }>
+  clone: (url: string, targetDir: string) => Promise<{ success: boolean; error?: string }>
+  worktreeAdd: (repoPath: string, worktreePath: string, branchName: string, baseBranch: string) => Promise<{ success: boolean; error?: string }>
+  worktreeList: (repoPath: string) => Promise<WorktreeInfo[]>
+  pushNewBranch: (repoPath: string, branchName: string) => Promise<{ success: boolean; error?: string }>
+  defaultBranch: (repoPath: string) => Promise<string>
+  remoteUrl: (repoPath: string) => Promise<string | null>
+}
+
+export type GhApi = {
+  isInstalled: () => Promise<boolean>
+  issues: (repoDir: string) => Promise<GitHubIssue[]>
+  repoSlug: (repoDir: string) => Promise<string | null>
+}
+
+export type ReposApi = {
+  getInitScript: (repoId: string) => Promise<string | null>
+  saveInitScript: (repoId: string, script: string) => Promise<{ success: boolean; error?: string }>
+}
+
+export type ShellApi = {
+  exec: (command: string, cwd: string) => Promise<{ success: boolean; stdout: string; stderr: string; exitCode: number }>
 }
 
 export type AgentData = {
@@ -120,6 +162,9 @@ export type SessionData = {
   name: string
   directory: string
   agentId?: string | null
+  repoId?: string
+  issueNumber?: number
+  issueTitle?: string
   // New generic panel visibility
   panelVisibility?: PanelVisibility
   // Legacy fields for backwards compat
@@ -131,6 +176,7 @@ export type SessionData = {
   fileViewerPosition?: 'top' | 'left'
   layoutSizes?: LayoutSizesData
   explorerFilter?: 'all' | 'changed' | 'files' | 'source-control' | 'search'
+  terminalTabs?: unknown
 }
 
 export type ConfigData = {
@@ -139,6 +185,8 @@ export type ConfigData = {
   showSidebar?: boolean
   sidebarWidth?: number
   toolbarPanels?: string[]
+  repos?: ManagedRepo[]
+  defaultCloneDir?: string
 }
 
 export type ConfigApi = {
@@ -197,6 +245,27 @@ const gitApi: GitApi = {
   commit: (repoPath, message) => ipcRenderer.invoke('git:commit', repoPath, message),
   push: (repoPath) => ipcRenderer.invoke('git:push', repoPath),
   pull: (repoPath) => ipcRenderer.invoke('git:pull', repoPath),
+  clone: (url, targetDir) => ipcRenderer.invoke('git:clone', url, targetDir),
+  worktreeAdd: (repoPath, worktreePath, branchName, baseBranch) => ipcRenderer.invoke('git:worktreeAdd', repoPath, worktreePath, branchName, baseBranch),
+  worktreeList: (repoPath) => ipcRenderer.invoke('git:worktreeList', repoPath),
+  pushNewBranch: (repoPath, branchName) => ipcRenderer.invoke('git:pushNewBranch', repoPath, branchName),
+  defaultBranch: (repoPath) => ipcRenderer.invoke('git:defaultBranch', repoPath),
+  remoteUrl: (repoPath) => ipcRenderer.invoke('git:remoteUrl', repoPath),
+}
+
+const ghApi: GhApi = {
+  isInstalled: () => ipcRenderer.invoke('gh:isInstalled'),
+  issues: (repoDir) => ipcRenderer.invoke('gh:issues', repoDir),
+  repoSlug: (repoDir) => ipcRenderer.invoke('gh:repoSlug', repoDir),
+}
+
+const reposApi: ReposApi = {
+  getInitScript: (repoId) => ipcRenderer.invoke('repos:getInitScript', repoId),
+  saveInitScript: (repoId, script) => ipcRenderer.invoke('repos:saveInitScript', repoId, script),
+}
+
+const shellApi: ShellApi = {
+  exec: (command, cwd) => ipcRenderer.invoke('shell:exec', command, cwd),
 }
 
 const configApi: ConfigApi = {
@@ -206,6 +275,7 @@ const configApi: ConfigApi = {
 
 export type AppApi = {
   isDev: () => Promise<boolean>
+  homedir: () => Promise<string>
 }
 
 export type MenuItemDef = {
@@ -221,6 +291,7 @@ export type MenuApi = {
 
 const appApi: AppApi = {
   isDev: () => ipcRenderer.invoke('app:isDev'),
+  homedir: () => ipcRenderer.invoke('app:homedir'),
 }
 
 const menuApi: MenuApi = {
@@ -248,6 +319,9 @@ contextBridge.exposeInMainWorld('config', configApi)
 contextBridge.exposeInMainWorld('app', appApi)
 contextBridge.exposeInMainWorld('hooks', hooksApi)
 contextBridge.exposeInMainWorld('menu', menuApi)
+contextBridge.exposeInMainWorld('gh', ghApi)
+contextBridge.exposeInMainWorld('repos', reposApi)
+contextBridge.exposeInMainWorld('shell', shellApi)
 
 declare global {
   interface Window {
@@ -259,5 +333,8 @@ declare global {
     app: AppApi
     hooks: HooksApi
     menu: MenuApi
+    gh: GhApi
+    repos: ReposApi
+    shell: ShellApi
   }
 }
