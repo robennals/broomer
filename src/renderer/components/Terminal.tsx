@@ -36,10 +36,13 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const isFollowingRef = useRef(true)
   const { addError } = useErrorStore()
   const updateAgentMonitor = useSessionStore((state) => state.updateAgentMonitor)
+  const markSessionRead = useSessionStore((state) => state.markSessionRead)
 
   // Use ref for updateAgentMonitor to avoid effect re-runs
   const updateAgentMonitorRef = useRef(updateAgentMonitor)
   updateAgentMonitorRef.current = updateAgentMonitor
+  const markSessionReadRef = useRef(markSessionRead)
+  markSessionReadRef.current = markSessionRead
 
   // Use ref for sessionId to avoid effect re-runs
   const sessionIdRef = useRef(sessionId)
@@ -81,6 +84,10 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   useEffect(() => {
     if (!containerRef.current || !sessionId) return
 
+    // Grace period: ignore status updates for 5 seconds after terminal creation
+    // to avoid false "needs attention" on startup when the agent does initial output
+    const effectStartTime = Date.now()
+
     // Create hooks tracker for agent terminals
     // Status detection is handled entirely by hooks (PreToolUse, PostToolUse, PermissionRequest, Stop)
     if (isAgentTerminal) {
@@ -112,6 +119,9 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
         // Mark that hooks provided this update - prevent terminal parsing from overwriting for 2 seconds
         lastHooksUpdateRef.current = Date.now()
+
+        // Skip status updates during startup grace period to avoid false "needs attention"
+        if (Date.now() - effectStartTime < 5000) return
 
         scheduleUpdate(update)
       })
@@ -259,6 +269,10 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
         // Connect terminal input to PTY
         terminal.onData((data) => {
           lastUserInputRef.current = Date.now()  // Track user typing
+          // Typing clears "needs attention" - if you're typing, you're paying attention
+          if (sessionIdRef.current) {
+            markSessionReadRef.current(sessionIdRef.current)
+          }
           window.pty.write(id, data)
         })
 
@@ -276,7 +290,8 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
           // Simple activity detection: any terminal output = working
           // Just pause briefly after user interaction to avoid false positives
-          if (isAgentTerminal && data.length > 0) {
+          // Skip status updates during startup grace period to avoid false "needs attention"
+          if (isAgentTerminal && data.length > 0 && (Date.now() - effectStartTime >= 5000)) {
             const now = Date.now()
             const timeSinceInput = now - lastUserInputRef.current
             const timeSinceInteraction = now - lastInteractionRef.current
