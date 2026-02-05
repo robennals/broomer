@@ -28,8 +28,6 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const lastUserInputRef = useRef<number>(0)  // Track when user last typed
   const lastInteractionRef = useRef<number>(0)  // Track focus/session changes
   const [ptyId, setPtyId] = useState<string | null>(null)
-  // Track if user has scrolled up (disable auto-scroll)
-  const isFollowingRef = useRef(true)
   const { addError } = useErrorStore()
   const updateAgentMonitor = useSessionStore((state) => state.updateAgentMonitor)
   const markSessionRead = useSessionStore((state) => state.markSessionRead)
@@ -140,11 +138,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     // Wait for next frame to ensure container has dimensions before fitting
     requestAnimationFrame(() => {
       if (containerRef.current && containerRef.current.offsetWidth > 0 && containerRef.current.offsetHeight > 0) {
-        try {
-          fitAddon.fit()
-        } catch (e) {
-          // Ignore fit errors during initialization
-        }
+        fitAndScroll()
       }
     })
 
@@ -163,51 +157,22 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       return true // Handle normally in terminal
     })
 
-    // Track scroll position to implement follow mode
-    // When user scrolls up, disable auto-scroll; when they scroll to bottom, re-enable
-    // We need to distinguish user-initiated scrolls from write-triggered scrolls.
-    let isWriting = false
-
-    const checkIfAtBottom = () => {
-      const buffer = terminal.buffer.active
-      // We're at bottom if viewport is at or very close to the base (within 3 rows)
-      const atBottom = buffer.viewportY >= buffer.baseY - 3
-      if (isWriting) {
-        // During a write, xterm auto-scrolls to bottom. Don't update follow state
-        // from write-triggered scroll events — only from user scrolls.
-        return
-      }
-      isFollowingRef.current = atBottom
-    }
-
-    // Listen for scroll events (fires for both user scrolls and programmatic scrolls)
-    terminal.onScroll(() => {
-      checkIfAtBottom()
-    })
-
-    // Also listen for wheel events on the terminal container to catch user scroll intent
-    const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY < 0) {
-        // User scrolled up — check if they're meaningfully above the bottom
-        requestAnimationFrame(() => {
-          const buffer = terminal.buffer.active
-          const atBottom = buffer.viewportY >= buffer.baseY - 3
-          if (!atBottom) {
-            isFollowingRef.current = false
-          }
-        })
-      } else if (e.deltaY > 0) {
-        // User scrolled down — check if they've reached the bottom
-        requestAnimationFrame(() => {
-          const buffer = terminal.buffer.active
-          const atBottom = buffer.viewportY >= buffer.baseY - 3
-          if (atBottom) {
-            isFollowingRef.current = true
-          }
-        })
+    // Helper: fit terminal, preserving scroll position. If viewport was at
+    // the bottom before fit, scroll back to bottom after (since fit can
+    // displace the viewport). xterm natively auto-scrolls on new content
+    // when at the bottom, so we don't need custom follow-mode tracking.
+    const fitAndScroll = () => {
+      try {
+        const buffer = terminal.buffer.active
+        const wasAtBottom = buffer.viewportY >= buffer.baseY - 3
+        fitAddon.fit()
+        if (wasAtBottom) {
+          terminal.scrollToBottom()
+        }
+      } catch (e) {
+        // Ignore fit errors
       }
     }
-    containerRef.current.addEventListener('wheel', handleWheel)
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -229,16 +194,9 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
         })
 
         // Connect PTY output to terminal
+        // xterm natively auto-scrolls when viewport is at bottom - no manual scrollToBottom needed
         const removeDataListener = window.pty.onData(id, (data) => {
-          isWriting = true
-          terminal.write(data, () => {
-            isWriting = false
-            // Auto-scroll to bottom if in follow mode - must happen AFTER write
-            // completes so the viewport extent includes the new content
-            if (isFollowingRef.current) {
-              terminal.scrollToBottom()
-            }
-          })
+          terminal.write(data)
 
           // Simple activity detection: any terminal output = working
           // Just pause briefly after user interaction to avoid false positives
@@ -306,14 +264,10 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       if (!entry || entry.contentRect.width === 0 || entry.contentRect.height === 0) {
         return
       }
-      try {
-        fitAddon.fit()
-        // Only resize PTY if we have valid dimensions
-        if (id && terminal.cols > 0 && terminal.rows > 0) {
-          window.pty.resize(id, terminal.cols, terminal.rows)
-        }
-      } catch (e) {
-        // Ignore fit errors (can happen if terminal not fully initialized)
+      fitAndScroll()
+      // Only resize PTY if we have valid dimensions
+      if (id && terminal.cols > 0 && terminal.rows > 0) {
+        window.pty.resize(id, terminal.cols, terminal.rows)
       }
     })
     const containerEl = containerRef.current
@@ -321,7 +275,6 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
     return () => {
       resizeObserver.disconnect()
-      containerEl.removeEventListener('wheel', handleWheel)
       cleanupRef.current?.()
       if (ptyId) {
         window.pty.kill(ptyId)
@@ -348,7 +301,12 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     const handleResize = () => {
       if (fitAddonRef.current && terminalRef.current && ptyId) {
         try {
+          const buffer = terminalRef.current.buffer.active
+          const wasAtBottom = buffer.viewportY >= buffer.baseY - 3
           fitAddonRef.current.fit()
+          if (wasAtBottom) {
+            terminalRef.current.scrollToBottom()
+          }
           if (terminalRef.current.cols > 0 && terminalRef.current.rows > 0) {
             window.pty.resize(ptyId, terminalRef.current.cols, terminalRef.current.rows)
           }
@@ -362,17 +320,20 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     return () => window.removeEventListener('resize', handleResize)
   }, [ptyId])
 
-  // Scroll to bottom when terminal becomes active (and reset to follow mode)
+  // Scroll to bottom when terminal becomes active
   // Also track session changes to suppress activity detection briefly
   useEffect(() => {
     lastInteractionRef.current = Date.now()  // Session switched
-    if (isActive && terminalRef.current) {
-      // Small delay to ensure terminal is visible and rendered
-      const timeout = setTimeout(() => {
+    if (isActive && terminalRef.current && fitAddonRef.current) {
+      // Use rAF to ensure the container is visible and has dimensions before fitting
+      requestAnimationFrame(() => {
+        try {
+          fitAddonRef.current?.fit()
+        } catch (e) {
+          // Ignore fit errors
+        }
         terminalRef.current?.scrollToBottom()
-        isFollowingRef.current = true
-      }, 50)
-      return () => clearTimeout(timeout)
+      })
     }
   }, [isActive])
 
@@ -397,5 +358,9 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     )
   }
 
-  return <div ref={containerRef} className="h-full w-full p-2" />
+  return (
+    <div className="h-full w-full p-2">
+      <div ref={containerRef} className="h-full w-full" />
+    </div>
+  )
 }
