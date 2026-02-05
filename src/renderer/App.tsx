@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import type { GitFileStatus, GitStatusResult } from '../preload/index'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
@@ -60,19 +60,6 @@ function AppContent() {
   const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
   const [openFileInDiffMode, setOpenFileInDiffMode] = useState(false)
   const [showPanelPicker, setShowPanelPicker] = useState(false)
-
-  // Hooks status tracking per configDir
-  const [hooksStatusCache, setHooksStatusCache] = useState<Record<string, boolean>>({})
-  const [dismissedConfigDirs, setDismissedConfigDirs] = useState<Set<string>>(() => {
-    // Load dismissed dirs from localStorage
-    try {
-      const saved = localStorage.getItem('hooks-dismissed-config-dirs')
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    } catch {
-      return new Set()
-    }
-  })
-  const hooksCheckInProgress = useRef<Set<string>>(new Set())
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
   const activeDirectoryExists = activeSession ? (directoryExists[activeSession.id] ?? true) : true
@@ -177,7 +164,7 @@ function AppContent() {
 
   // Update window title to show active session name
   useEffect(() => {
-    document.title = activeSession ? `${activeSession.name} — Agent Manager` : 'Agent Manager'
+    document.title = activeSession ? `${activeSession.name} — Broomer` : 'Broomer'
   }, [activeSession?.name, activeSession?.id])
 
   // Mark session as read when it becomes active, and focus agent terminal
@@ -223,7 +210,6 @@ function AppContent() {
         content += `Directory: ${activeSession.directory}\n`
         content += `Status: ${activeSession.status}\n`
         content += `Last Message: ${activeSession.lastMessage || '(none)'}\n`
-        content += `Waiting Type: ${activeSession.waitingType || '(none)'}\n`
         content += '\n=== Terminal Output (last 200 lines) ===\n\n'
         content += buffer || '(no content)'
 
@@ -274,82 +260,6 @@ function AppContent() {
     const agent = agents.find((a) => a.id === session.agentId)
     return agent?.env
   }, [agents])
-
-  // Get CLAUDE_CONFIG_DIR for current session's agent
-  // Note: ~/.claude is the default, so treat it as undefined
-  const activeConfigDir = useMemo(() => {
-    if (!activeSession?.agentId) return undefined
-    const agent = agents.find((a) => a.id === activeSession.agentId)
-    const configDir = agent?.env?.CLAUDE_CONFIG_DIR
-    // ~/.claude is the default, treat it as not set
-    if (configDir === '~/.claude') return undefined
-    return configDir
-  }, [activeSession?.agentId, agents])
-
-  // Check hooks status when config dir changes (only if there's an active agent)
-  useEffect(() => {
-    // Only check if there's an active session with an agent
-    if (!activeSession?.agentId) {
-      return
-    }
-
-    const configDir = activeConfigDir || '~/.claude'
-
-    // Skip if already checked or check in progress
-    if (configDir in hooksStatusCache || hooksCheckInProgress.current.has(configDir)) {
-      return
-    }
-
-    hooksCheckInProgress.current.add(configDir)
-
-    window.hooks.checkSetup(configDir).then((status) => {
-      setHooksStatusCache(prev => ({ ...prev, [configDir]: status.configured }))
-      hooksCheckInProgress.current.delete(configDir)
-    }).catch(() => {
-      hooksCheckInProgress.current.delete(configDir)
-    })
-  }, [activeSession?.agentId, activeConfigDir, hooksStatusCache])
-
-  // Compute current hooks status for display
-  // Only show if there's an active session with an agent
-  const currentHooksStatus = useMemo(() => {
-    // Don't show banner if no active session or no agent
-    if (!activeSession?.agentId) {
-      return { needsSetup: false, configDir: undefined }
-    }
-
-    const configDir = activeConfigDir || '~/.claude'
-    const isConfigured = hooksStatusCache[configDir]
-    const isDismissed = dismissedConfigDirs.has(configDir)
-
-    return {
-      needsSetup: isConfigured === false && !isDismissed,
-      configDir,
-    }
-  }, [activeSession?.agentId, activeConfigDir, hooksStatusCache, dismissedConfigDirs])
-
-  // Handle configure hooks
-  const handleConfigureHooks = useCallback(async (configDir?: string) => {
-    const dir = configDir || '~/.claude'
-    const result = await window.hooks.configure(dir)
-    if (result.success) {
-      setHooksStatusCache(prev => ({ ...prev, [dir]: true }))
-    } else {
-      throw new Error(result.error || 'Failed to configure hooks')
-    }
-  }, [])
-
-  // Handle dismiss hooks banner
-  const handleDismissHooks = useCallback(() => {
-    const configDir = activeConfigDir || '~/.claude'
-    setDismissedConfigDirs(prev => {
-      const next = new Set(prev)
-      next.add(configDir)
-      // Save to localStorage
-      localStorage.setItem('hooks-dismissed-config-dirs', JSON.stringify([...next]))
-      return next
-    })
-  }, [activeConfigDir])
 
   const handleLayoutSizeChange = (key: keyof LayoutSizes, value: number) => {
     if (activeSessionId) {
@@ -431,9 +341,6 @@ function AppContent() {
         onSelectSession={setActiveSession}
         onNewSession={handleNewSession}
         onDeleteSession={removeSession}
-        hooksStatus={currentHooksStatus}
-        onConfigureHooks={handleConfigureHooks}
-        onDismissHooks={handleDismissHooks}
       />
     ),
     [PANEL_IDS.AGENT_TERMINAL]: agentTerminalPanel,
@@ -484,9 +391,6 @@ function AppContent() {
     agentTerminalPanel,
     userTerminalPanel,
     handleToggleFileViewer,
-    currentHooksStatus,
-    handleConfigureHooks,
-    handleDismissHooks,
   ])
 
   if (isLoading) {

@@ -46,9 +46,9 @@ test.describe('Status Detection', () => {
     // Wait for initial load
     await page.waitForTimeout(500)
 
-    // Select the agent-manager session (which has an agent configured)
-    const agentManagerSession = page.locator('.cursor-pointer:has-text("agent-manager")')
-    await agentManagerSession.click()
+    // Select the broomer session (which has an agent configured)
+    const broomerSession = page.locator('.cursor-pointer:has-text("broomer")')
+    await broomerSession.click()
     await page.waitForTimeout(300)
 
     // Wait for the fake Claude to start outputting (the ready marker appears first)
@@ -156,8 +156,8 @@ test.describe('Status Detection Timing', () => {
     // The fake Claude outputs, then stops, and after 1 second status should be idle
 
     // Select the session with an agent
-    const agentManagerSession = page.locator('.cursor-pointer:has-text("agent-manager")')
-    await agentManagerSession.click()
+    const broomerSession = page.locator('.cursor-pointer:has-text("broomer")')
+    await broomerSession.click()
 
     // Wait for fake claude to finish (about 5 seconds of output)
     await page.waitForTimeout(6000)

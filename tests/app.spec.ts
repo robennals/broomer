@@ -41,9 +41,9 @@ test.afterAll(async () => {
   }
 })
 
-test.describe('Agent Manager App', () => {
+test.describe('Broomer App', () => {
   test('should display the app title', async () => {
-    const title = page.locator('text=Agent Manager')
+    const title = page.locator('text=Broomer')
     await expect(title).toBeVisible()
   })
 
@@ -54,8 +54,8 @@ test.describe('Agent Manager App', () => {
 
   test('should display demo sessions in the sidebar', async () => {
     // Check for demo sessions (sessions are now divs, not buttons)
-    const agentManagerSession = page.locator('div:has-text("agent-manager")').first()
-    await expect(agentManagerSession).toBeVisible()
+    const broomerSession = page.locator('div:has-text("broomer")').first()
+    await expect(broomerSession).toBeVisible()
 
     const backendSession = page.locator('div:has-text("backend-api")').first()
     await expect(backendSession).toBeVisible()
@@ -129,12 +129,12 @@ test.describe('Agent Manager App', () => {
     // The backend session should now be selected (has bg-bg-tertiary class)
     await expect(backendSession).toHaveClass(/bg-bg-tertiary/)
 
-    // Click back to agent-manager session
-    const agentManagerSession = page.locator('.cursor-pointer:has-text("agent-manager")')
-    await agentManagerSession.click()
+    // Click back to broomer session
+    const broomerSession = page.locator('.cursor-pointer:has-text("broomer")')
+    await broomerSession.click()
     await page.waitForTimeout(300)
 
-    await expect(agentManagerSession).toHaveClass(/bg-bg-tertiary/)
+    await expect(broomerSession).toHaveClass(/bg-bg-tertiary/)
   })
 })
 
@@ -214,7 +214,7 @@ test.describe('Terminal Integration', () => {
 test.describe('Layout', () => {
   test('should have correct layout structure', async () => {
     // Title bar - look for the app title text
-    const titleBar = page.locator('text=Agent Manager').first()
+    const titleBar = page.locator('text=Broomer').first()
     await expect(titleBar).toBeVisible()
 
     // Sidebar - contains session list with "+ New Session" button
@@ -281,7 +281,7 @@ test.describe('Explorer Panel', () => {
     await page.waitForTimeout(300)
 
     // The demo sessions use /tmp/e2e-* directories - use partial match
-    const directoryPath = page.locator('text=e2e-agent-manager')
+    const directoryPath = page.locator('text=e2e-broomer')
     await expect(directoryPath).toBeVisible()
 
     // Close the panel
@@ -357,8 +357,8 @@ test.describe('Session Terminal Persistence', () => {
     await page.waitForTimeout(500)
 
     // Switch back to the first session
-    const agentManagerSession = page.locator('.cursor-pointer:has-text("agent-manager")')
-    await agentManagerSession.click()
+    const broomerSession = page.locator('.cursor-pointer:has-text("broomer")')
+    await broomerSession.click()
     await page.waitForTimeout(500)
 
     // Verify the marker is still in the terminal

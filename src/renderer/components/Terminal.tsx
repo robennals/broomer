@@ -4,7 +4,6 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { useErrorStore } from '../store/errors'
 import { useSessionStore } from '../store/sessions'
-import { ClaudeHooksStateTracker, type HookEvent } from '../utils/claudeHooksState'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 import '@xterm/xterm/css/xterm.css'
 
@@ -23,14 +22,11 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const fitAddonRef = useRef<FitAddon | null>(null)
   const serializeAddonRef = useRef<SerializeAddon | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
-  const hooksTrackerRef = useRef<ClaudeHooksStateTracker | null>(null)
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const hooksCleanupRef = useRef<(() => void) | null>(null)
-  const lastStatusRef = useRef<'working' | 'waiting' | 'idle'>('idle')
+  const lastStatusRef = useRef<'working' | 'idle'>('idle')
   const lastUserInputRef = useRef<number>(0)  // Track when user last typed
   const lastInteractionRef = useRef<number>(0)  // Track focus/session changes
-  const lastHooksUpdateRef = useRef<number>(0)  // Track when hooks last provided an update
   const [ptyId, setPtyId] = useState<string | null>(null)
   // Track if user has scrolled up (disable auto-scroll)
   const isFollowingRef = useRef(true)
@@ -49,7 +45,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   sessionIdRef.current = sessionId
 
   // Debounced update to avoid flicker - collects updates over 300ms
-  const pendingUpdateRef = useRef<{ status?: 'working' | 'waiting' | 'idle' | 'error'; lastMessage?: string; waitingType?: 'tool' | 'question' | 'prompt' | null } | null>(null)
+  const pendingUpdateRef = useRef<{ status?: 'working' | 'idle' | 'error'; lastMessage?: string } | null>(null)
 
   // Stable flush function using refs
   const flushUpdate = useCallback(() => {
@@ -60,7 +56,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   }, [])
 
   // Stable schedule function
-  const scheduleUpdate = useCallback((update: { status?: 'working' | 'waiting' | 'idle' | 'error'; lastMessage?: string; waitingType?: 'tool' | 'question' | 'prompt' | null }) => {
+  const scheduleUpdate = useCallback((update: { status?: 'working' | 'idle' | 'error'; lastMessage?: string }) => {
     // Merge with pending update
     pendingUpdateRef.current = {
       ...pendingUpdateRef.current,
@@ -87,50 +83,6 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     // Grace period: ignore status updates for 5 seconds after terminal creation
     // to avoid false "needs attention" on startup when the agent does initial output
     const effectStartTime = Date.now()
-
-    // Create hooks tracker for agent terminals
-    // Status detection is handled entirely by hooks (PreToolUse, PostToolUse, PermissionRequest, Stop)
-    if (isAgentTerminal) {
-      hooksTrackerRef.current = new ClaudeHooksStateTracker()
-
-      // Start watching for hook events
-      window.hooks.clear(sessionId).then(() => {
-        window.hooks.watch(sessionId)
-      })
-
-      // Listen for hook events
-      const removeHooksListener = window.hooks.onEvent(sessionId, (event: HookEvent) => {
-        if (!hooksTrackerRef.current) return
-
-        const state = hooksTrackerRef.current.processEvent(event)
-
-        // Hook events are authoritative - update immediately
-        const update: { status?: 'working' | 'waiting' | 'idle' | 'error'; lastMessage?: string; waitingType?: 'tool' | 'question' | 'prompt' | null } = {}
-
-        if (state.status) {
-          update.status = state.status
-        }
-        if (state.lastMessage) {
-          update.lastMessage = state.lastMessage
-        }
-        if (state.waitingType !== undefined) {
-          update.waitingType = state.waitingType
-        }
-
-        // Mark that hooks provided this update - prevent terminal parsing from overwriting for 2 seconds
-        lastHooksUpdateRef.current = Date.now()
-
-        // Skip status updates during startup grace period to avoid false "needs attention"
-        if (Date.now() - effectStartTime < 5000) return
-
-        scheduleUpdate(update)
-      })
-
-      hooksCleanupRef.current = () => {
-        removeHooksListener()
-        window.hooks.unwatch(sessionId)
-      }
-    }
 
     // Create terminal
     const terminal = new XTerm({
@@ -260,7 +212,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
-    // Create PTY (pass sessionId for hooks integration and agent env vars)
+    // Create PTY (pass sessionId and agent env vars)
     const id = `${sessionId}-${Date.now()}`
     window.pty.create({ id, cwd, command, sessionId, env })
       .then(() => {
@@ -308,7 +260,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
               }
               idleTimeoutRef.current = setTimeout(() => {
                 lastStatusRef.current = 'idle'
-                scheduleUpdate({ status: 'idle', waitingType: null })
+                scheduleUpdate({ status: 'idle' })
               }, 1000)
               return
             }
@@ -324,7 +276,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
             // Set idle timeout - if no activity for 1 second, mark as idle
             idleTimeoutRef.current = setTimeout(() => {
               lastStatusRef.current = 'idle'
-              scheduleUpdate({ status: 'idle', waitingType: null })
+              scheduleUpdate({ status: 'idle' })
             }, 1000)
           }
         })
@@ -371,13 +323,11 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       resizeObserver.disconnect()
       containerEl.removeEventListener('wheel', handleWheel)
       cleanupRef.current?.()
-      hooksCleanupRef.current?.()
       if (ptyId) {
         window.pty.kill(ptyId)
       }
       terminal.dispose()
-      // Clean up hooks tracker and timeouts
-      hooksTrackerRef.current?.reset()
+      // Clean up timeouts
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current)
       }

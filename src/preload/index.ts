@@ -9,33 +9,6 @@ export type PtyApi = {
   onExit: (id: string, callback: (exitCode: number) => void) => () => void
 }
 
-export type HookEvent = {
-  type: 'PreToolUse' | 'PostToolUse' | 'PermissionRequest' | 'Stop' | 'Notification' | string
-  timestamp: number
-  sessionId: string
-  data?: {
-    tool?: string
-    message?: string
-    [key: string]: unknown
-  }
-}
-
-export type HooksSetupStatus = {
-  configured: boolean
-  reason?: 'no-claude-settings' | 'no-hooks-section' | 'hooks-incomplete' | 'error'
-  error?: string
-  configDir?: string
-}
-
-export type HooksApi = {
-  watch: (sessionId: string) => Promise<{ success: boolean; error?: string }>
-  unwatch: (sessionId: string) => Promise<{ success: boolean }>
-  clear: (sessionId: string) => Promise<{ success: boolean }>
-  onEvent: (sessionId: string, callback: (event: HookEvent) => void) => () => void
-  checkSetup: (configDir?: string) => Promise<HooksSetupStatus>
-  configure: (configDir?: string) => Promise<{ success: boolean; error?: string; backupPath?: string }>
-}
-
 export type DialogApi = {
   openFolder: () => Promise<string | null>
 }
@@ -302,18 +275,6 @@ const menuApi: MenuApi = {
   popup: (items) => ipcRenderer.invoke('menu:popup', items),
 }
 
-const hooksApi: HooksApi = {
-  watch: (sessionId) => ipcRenderer.invoke('hooks:watch', sessionId),
-  unwatch: (sessionId) => ipcRenderer.invoke('hooks:unwatch', sessionId),
-  clear: (sessionId) => ipcRenderer.invoke('hooks:clear', sessionId),
-  onEvent: (sessionId, callback) => {
-    const handler = (_event: Electron.IpcRendererEvent, data: HookEvent) => callback(data)
-    ipcRenderer.on(`hooks:event:${sessionId}`, handler)
-    return () => ipcRenderer.removeListener(`hooks:event:${sessionId}`, handler)
-  },
-  checkSetup: (configDir) => ipcRenderer.invoke('hooks:checkSetup', configDir),
-  configure: (configDir) => ipcRenderer.invoke('hooks:configure', configDir),
-}
 
 contextBridge.exposeInMainWorld('pty', ptyApi)
 contextBridge.exposeInMainWorld('dialog', dialogApi)
@@ -321,7 +282,7 @@ contextBridge.exposeInMainWorld('fs', fsApi)
 contextBridge.exposeInMainWorld('git', gitApi)
 contextBridge.exposeInMainWorld('config', configApi)
 contextBridge.exposeInMainWorld('app', appApi)
-contextBridge.exposeInMainWorld('hooks', hooksApi)
+
 contextBridge.exposeInMainWorld('menu', menuApi)
 contextBridge.exposeInMainWorld('gh', ghApi)
 contextBridge.exposeInMainWorld('repos', reposApi)
@@ -335,7 +296,7 @@ declare global {
     git: GitApi
     config: ConfigApi
     app: AppApi
-    hooks: HooksApi
+
     menu: MenuApi
     gh: GhApi
     repos: ReposApi

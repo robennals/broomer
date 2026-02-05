@@ -1,4 +1,4 @@
-# Agent Manager
+# Broomer
 
 A desktop application for managing multiple AI coding agents (like Claude Code) across different repositories and worktrees. See all your agent sessions at a glance, monitor their status, and interact with them through embedded terminals.
 
@@ -22,7 +22,7 @@ A desktop application for managing multiple AI coding agents (like Claude Code) 
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd agent-manager
+cd broomer
 
 # Install dependencies
 npm install
@@ -50,8 +50,8 @@ npm run preview
 ```
 
 **Note:** Development mode (`npm run dev`) and production mode use separate config files:
-- Development: `~/.agent-manager/config.dev.json`
-- Production: `~/.agent-manager/config.json`
+- Development: `~/.broomer/config.dev.json`
+- Production: `~/.broomer/config.json`
 
 This allows you to have test sessions in dev mode without affecting your real work.
 
@@ -135,7 +135,7 @@ Built with:
 ## Project Structure
 
 ```
-agent-manager/
+broomer/
 ├── src/
 │   ├── main/           # Electron main process
 │   │   └── index.ts    # App entry, window creation, PTY management

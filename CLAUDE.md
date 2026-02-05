@@ -16,12 +16,12 @@ If you encounter "posix_spawnp failed" terminal errors, run: `npx @electron/rebu
 
 ## Architecture
 
-Agent Manager is an Electron + React desktop app for managing multiple AI coding agent sessions (like Claude Code) across different repositories.
+Broomer is an Electron + React desktop app for managing multiple AI coding agent sessions (like Claude Code) across different repositories.
 
 ### Process Structure
 
-- **Main process** (`src/main/index.ts`): Electron app entry, window management, PTY spawning, IPC handlers for git/filesystem/hooks
-- **Preload** (`src/preload/index.ts`): Context bridge exposing `window.pty`, `window.fs`, `window.git`, `window.config`, `window.hooks` APIs
+- **Main process** (`src/main/index.ts`): Electron app entry, window management, PTY spawning, IPC handlers for git/filesystem
+- **Preload** (`src/preload/index.ts`): Context bridge exposing `window.pty`, `window.fs`, `window.git`, `window.config` APIs
 - **Renderer** (`src/renderer/`): React UI with Zustand state management
 
 ### Key Renderer Organization
@@ -32,17 +32,13 @@ Agent Manager is an Electron + React desktop app for managing multiple AI coding
 - `components/Terminal.tsx` - xterm.js terminal with PTY integration
 - `panels/` - Registry-based modular panel system
 
-### Claude Code Hook Integration
+### Agent Activity Detection
 
-Agent Manager monitors Claude Code state via a hook system:
-- `scripts/claude-hook.sh` - Hook script triggered when `AGENT_MANAGER_SESSION_ID` env var is set
-- Writes JSONL events to `~/.agent-manager/hooks-events/{sessionId}.jsonl`
-- Events: `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Stop`
-- Fallback: terminal output parsing in `utils/claudeOutputParser.ts`
+Broomer detects agent status via terminal output parsing in `utils/claudeOutputParser.ts`. Any terminal output marks the agent as "working"; after 1 second of no output, it transitions to "idle". When transitioning from working to idle, the session is marked as unread to notify the user.
 
 ### Data Persistence
 
-Config files at `~/.agent-manager/`:
+Config files at `~/.broomer/`:
 - `config.json` (production) / `config.dev.json` (development)
 - Contains agents, sessions with panel visibility and layout sizes
 

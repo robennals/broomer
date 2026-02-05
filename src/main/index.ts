@@ -1,18 +1,10 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import { join } from 'path'
 import { homedir } from 'os'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, openSync, closeSync, chmodSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, chmodSync } from 'fs'
 import * as pty from 'node-pty'
 import simpleGit from 'simple-git'
 import { exec, execSync } from 'child_process'
-
-// Hooks events directory
-const HOOKS_EVENT_DIR = join(homedir(), '.agent-manager', 'hooks-events')
-
-// Ensure hooks event directory exists
-if (!existsSync(HOOKS_EVENT_DIR)) {
-  mkdirSync(HOOKS_EVENT_DIR, { recursive: true })
-}
 
 // Check if we're in development mode
 const isDev = process.env.ELECTRON_RENDERER_URL !== undefined
@@ -30,8 +22,6 @@ const E2E_MOCK_SHELL = process.env.E2E_MOCK_SHELL
 const ptyProcesses = new Map<string, pty.IPty>()
 // File watchers map
 const fileWatchers = new Map<string, FSWatcher>()
-// Hook event watchers map (tracks file position for each session)
-const hookEventWatchers = new Map<string, { watcher: FSWatcher; position: number }>()
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
@@ -86,10 +76,6 @@ function createWindow(): void {
       watcher.close()
       fileWatchers.delete(id)
     }
-    for (const [id, { watcher }] of hookEventWatchers) {
-      watcher.close()
-      hookEventWatchers.delete(id)
-    }
   })
 }
 
@@ -122,7 +108,6 @@ ipcMain.handle('pty:create', (_event, options: { id: string; cwd: string; comman
     shellArgs = []
   }
 
-  // Create environment with session ID for Claude hooks
   // Start with process.env, but remove env vars that should be explicitly configured
   const baseEnv = { ...process.env } as Record<string, string>
   // Don't inherit CLAUDE_CONFIG_DIR - it should be explicitly set per-agent if needed
@@ -158,7 +143,6 @@ ipcMain.handle('pty:create', (_event, options: { id: string; cwd: string; comman
   const env = {
     ...baseEnv,
     ...agentEnv,  // Agent-specific env vars override base env
-    AGENT_MANAGER_SESSION_ID: options.sessionId || options.id,
   } as Record<string, string>
 
   const ptyProcess = pty.spawn(shell, shellArgs, {
@@ -217,101 +201,8 @@ ipcMain.handle('pty:kill', (_event, id: string) => {
   }
 })
 
-// Hook events IPC handlers
-ipcMain.handle('hooks:watch', async (_event, sessionId: string) => {
-  if (isE2ETest) {
-    return { success: true }
-  }
-
-  // Stop existing watcher for this session if any
-  const existing = hookEventWatchers.get(sessionId)
-  if (existing) {
-    existing.watcher.close()
-  }
-
-  const eventFile = join(HOOKS_EVENT_DIR, `${sessionId}.jsonl`)
-
-  // Create the event file if it doesn't exist
-  if (!existsSync(eventFile)) {
-    const fd = openSync(eventFile, 'a')
-    closeSync(fd)
-  }
-
-  // Get current file size to start reading from end
-  const stats = statSync(eventFile)
-  let position = stats.size
-
-  try {
-    const watcher = watch(eventFile, (eventType) => {
-      if (eventType !== 'change') return
-
-      try {
-        // Read new content from the file
-        const currentStats = statSync(eventFile)
-        if (currentStats.size <= position) {
-          // File was truncated, reset position
-          position = 0
-        }
-
-        const fd = openSync(eventFile, 'r')
-        const buffer = Buffer.alloc(currentStats.size - position)
-        const { readFileSync: readSync } = require('fs')
-        const fullContent = readFileSync(eventFile, 'utf-8')
-        const newContent = fullContent.slice(position)
-        position = currentStats.size
-        closeSync(fd)
-
-        // Parse and send each new event
-        const lines = newContent.trim().split('\n').filter(Boolean)
-        for (const line of lines) {
-          try {
-            const event = JSON.parse(line)
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send(`hooks:event:${sessionId}`, event)
-            }
-          } catch {
-            // Ignore malformed JSON lines
-          }
-        }
-      } catch (err) {
-        console.error('Error reading hook events:', err)
-      }
-    })
-
-    hookEventWatchers.set(sessionId, { watcher, position })
-
-    watcher.on('error', (error) => {
-      console.error('Hook event watcher error:', error)
-      hookEventWatchers.delete(sessionId)
-    })
-
-    return { success: true }
-  } catch (error) {
-    console.error('Failed to start hook event watcher:', error)
-    return { success: false, error: String(error) }
-  }
-})
-
-ipcMain.handle('hooks:unwatch', async (_event, sessionId: string) => {
-  const existing = hookEventWatchers.get(sessionId)
-  if (existing) {
-    existing.watcher.close()
-    hookEventWatchers.delete(sessionId)
-  }
-  return { success: true }
-})
-
-ipcMain.handle('hooks:clear', async (_event, sessionId: string) => {
-  // Clear the event file for a session (useful when restarting)
-  const eventFile = join(HOOKS_EVENT_DIR, `${sessionId}.jsonl`)
-  if (existsSync(eventFile)) {
-    writeFileSync(eventFile, '')
-  }
-  return { success: true }
-})
-
 // Config directory and file - use different config for dev mode
-const CONFIG_DIR = join(homedir(), '.agent-manager')
+const CONFIG_DIR = join(homedir(), '.broomer')
 const CONFIG_FILE = join(CONFIG_DIR, isDev ? 'config.dev.json' : 'config.json')
 
 // Default agents
@@ -322,7 +213,7 @@ const DEFAULT_AGENTS = [
 
 // Demo sessions for E2E tests (each needs a unique directory for branch tracking)
 const E2E_DEMO_SESSIONS = [
-  { id: '1', name: 'agent-manager', directory: '/tmp/e2e-agent-manager', agentId: 'claude' },
+  { id: '1', name: 'broomer', directory: '/tmp/e2e-broomer', agentId: 'claude' },
   { id: '2', name: 'backend-api', directory: '/tmp/e2e-backend-api', agentId: 'aider' },
   { id: '3', name: 'docs-site', directory: '/tmp/e2e-docs-site', agentId: null },
 ]
@@ -342,7 +233,7 @@ const E2E_DEMO_REPOS = [
 ]
 
 // Init scripts directory
-const INIT_SCRIPTS_DIR = join(homedir(), '.agent-manager', 'init-scripts')
+const INIT_SCRIPTS_DIR = join(homedir(), '.broomer', 'init-scripts')
 
 // Config IPC handlers
 ipcMain.handle('config:load', async () => {
@@ -406,7 +297,7 @@ ipcMain.handle('config:save', async (_event, config: { agents?: unknown[]; sessi
 
 // Mock branch data for E2E tests (keyed by directory)
 const E2E_MOCK_BRANCHES: Record<string, string> = {
-  '/tmp/e2e-agent-manager': 'main',
+  '/tmp/e2e-broomer': 'main',
   '/tmp/e2e-backend-api': 'feature/auth',
   '/tmp/e2e-docs-site': 'main',
 }
@@ -847,11 +738,6 @@ ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
 ipcMain.handle('app:isDev', () => isDev)
 ipcMain.handle('app:homedir', () => homedir())
 
-// Hooks setup IPC handlers
-const HOOK_SCRIPT_PATH = isDev
-  ? join(__dirname, '../../scripts/claude-hook.sh')
-  : join(__dirname, '../../../scripts/claude-hook.sh')
-
 // Expand ~ to home directory
 const expandHomePath = (path: string) => {
   if (path.startsWith('~/')) {
@@ -862,133 +748,6 @@ const expandHomePath = (path: string) => {
   }
   return path
 }
-
-// Get Claude settings file path for a given config dir
-const getClaudeSettingsFile = (configDir?: string) => {
-  const baseDir = configDir ? expandHomePath(configDir) : join(homedir(), '.claude')
-  return join(baseDir, 'settings.json')
-}
-
-ipcMain.handle('hooks:checkSetup', async (_event, configDir?: string) => {
-  try {
-    const settingsFile = getClaudeSettingsFile(configDir)
-
-    if (!existsSync(settingsFile)) {
-      return { configured: false, reason: 'no-claude-settings', configDir: configDir || '~/.claude' }
-    }
-
-    const settings = JSON.parse(readFileSync(settingsFile, 'utf-8'))
-
-    // Check if hooks section exists and has our hooks
-    if (!settings.hooks) {
-      return { configured: false, reason: 'no-hooks-section', configDir: configDir || '~/.claude' }
-    }
-
-    // Check for our specific hooks (look for agent-manager or our hook script)
-    // New format: each entry has { matcher: {}, hooks: [{ type, command }] }
-    const hasOurHook = (entries: Array<{ hooks?: Array<{ command?: string }> }>) => {
-      return entries?.some((entry) =>
-        entry.hooks?.some((h) => h.command?.includes('claude-hook.sh') || h.command?.includes('agent-manager'))
-      )
-    }
-
-    const hasPreToolUse = hasOurHook(settings.hooks.PreToolUse)
-    const hasPostToolUse = hasOurHook(settings.hooks.PostToolUse)
-    const hasPermissionRequest = hasOurHook(settings.hooks.PermissionRequest)
-    const hasStop = hasOurHook(settings.hooks.Stop)
-
-    if (hasPreToolUse && hasPostToolUse && hasPermissionRequest && hasStop) {
-      return { configured: true, configDir: configDir || '~/.claude' }
-    }
-
-    return { configured: false, reason: 'hooks-incomplete', configDir: configDir || '~/.claude' }
-  } catch (error) {
-    return { configured: false, reason: 'error', error: String(error), configDir: configDir || '~/.claude' }
-  }
-})
-
-ipcMain.handle('hooks:configure', async (_event, configDir?: string) => {
-  try {
-    const settingsFile = getClaudeSettingsFile(configDir)
-
-    if (!existsSync(settingsFile)) {
-      return { success: false, error: `Claude Code settings file not found at ${settingsFile}. Please run Claude Code at least once.` }
-    }
-
-    // Backup existing settings
-    const backupPath = settingsFile + '.backup'
-    const settingsContent = readFileSync(settingsFile, 'utf-8')
-    writeFileSync(backupPath, settingsContent)
-
-    const settings = JSON.parse(settingsContent)
-
-    // Resolve the hook script path
-    let hookScript = HOOK_SCRIPT_PATH
-    // For packaged app, the script is in resources
-    if (!isDev && !existsSync(hookScript)) {
-      hookScript = join(process.resourcesPath, 'scripts', 'claude-hook.sh')
-    }
-
-    // Ensure hooks section exists
-    if (!settings.hooks) {
-      settings.hooks = {}
-    }
-
-    // New hooks format requires matcher (string) and hooks array
-    // Example: {"PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "..."}]}]}
-    const hookEntry = (eventType: string) => ({
-      matcher: '*', // Match all
-      hooks: [
-        {
-          type: 'command',
-          command: `"${hookScript}" ${eventType}`
-        }
-      ]
-    })
-
-    // Helper to check if our hook is already configured
-    const hasOurHook = (entries: Array<{ hooks?: Array<{ command?: string }> }>) => {
-      return entries?.some((entry) =>
-        entry.hooks?.some((h) => h.command?.includes('claude-hook.sh'))
-      )
-    }
-
-    if (!settings.hooks.PreToolUse) {
-      settings.hooks.PreToolUse = []
-    }
-    if (!hasOurHook(settings.hooks.PreToolUse)) {
-      settings.hooks.PreToolUse.push(hookEntry('PreToolUse'))
-    }
-
-    if (!settings.hooks.PostToolUse) {
-      settings.hooks.PostToolUse = []
-    }
-    if (!hasOurHook(settings.hooks.PostToolUse)) {
-      settings.hooks.PostToolUse.push(hookEntry('PostToolUse'))
-    }
-
-    if (!settings.hooks.PermissionRequest) {
-      settings.hooks.PermissionRequest = []
-    }
-    if (!hasOurHook(settings.hooks.PermissionRequest)) {
-      settings.hooks.PermissionRequest.push(hookEntry('PermissionRequest'))
-    }
-
-    if (!settings.hooks.Stop) {
-      settings.hooks.Stop = []
-    }
-    if (!hasOurHook(settings.hooks.Stop)) {
-      settings.hooks.Stop.push(hookEntry('Stop'))
-    }
-
-    // Write updated settings
-    writeFileSync(settingsFile, JSON.stringify(settings, null, 2))
-
-    return { success: true, backupPath }
-  } catch (error) {
-    return { success: false, error: String(error) }
-  }
-})
 
 // Git extended handlers
 ipcMain.handle('git:clone', async (_event, url: string, targetDir: string) => {
@@ -1391,12 +1150,6 @@ app.on('window-all-closed', () => {
     watcher.close()
     fileWatchers.delete(id)
   }
-  // Close all hook event watchers
-  for (const [id, { watcher }] of hookEventWatchers) {
-    watcher.close()
-    hookEventWatchers.delete(id)
-  }
-
   if (process.platform !== 'darwin') {
     app.quit()
   }

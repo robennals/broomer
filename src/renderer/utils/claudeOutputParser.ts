@@ -1,9 +1,8 @@
-import type { SessionStatus, WaitingType } from '../store/sessions'
+import type { SessionStatus } from '../store/sessions'
 
 export interface ParseResult {
   status: SessionStatus | null // null = no change detected
   message: string | null // Meaningful text to display
-  waitingType: WaitingType
 }
 
 // Spinner characters used by Claude Code
@@ -42,44 +41,6 @@ const CLAUDE_INDICATORS = [
   /✻|✳|⏺|⎿/,  // Claude Code status icons
   ...SPINNER_CHARS.map(c => new RegExp(c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))),
 ]
-
-// Tool approval patterns - Claude Code specific
-const TOOL_APPROVAL_PATTERNS = [
-  /Allow\s+(Read|Edit|Write|Bash|Glob|Grep|Task)/i,
-  /\[Y\/n\]/,
-  /\[y\/N\]/,
-  /Do you want to (run|execute|allow|proceed|make this edit|make these edits)/i,
-  /Do you want to proceed\??/i,  // Bash approval (with or without ?)
-  /Press Enter to approve/i,
-  /Allow once/i,
-  /Allow always/i,
-  /Yes, allow all/i,
-  /Esc to cancel/i,
-  /Tab to amend/i,  // Another indicator of approval prompt
-  /❯\s*\d+\.\s*(Yes|No)/,  // Claude's menu selector on selected item
-  /\d+\.\s*(Yes|No)/,  // Numbered menu options (Yes/No) anywhere in text
-  /Would you like to proceed/i,  // Plan approval
-  /Yes, clear context/i,
-  /Yes, auto-accept/i,
-  /Yes, manually approve/i,
-  /ctrl-g to edit/i,  // Plan file hint
-  /always allow access to/i,  // Permission grant option
-  /◆\s*(Yes|No)/,  // Diamond bullet menu items
-  /○\s*(Yes|No)/,  // Circle bullet menu items
-  /●\s*(Yes|No)/,  // Filled circle menu items
-  /^\s*Yes\s*$/m,  // Standalone "Yes" option
-  /^\s*No\s*$/m,  // Standalone "No" option
-]
-
-// Question patterns - Claude Code asking the user something
-const QUESTION_PATTERNS = [
-  /What would you like/i,
-  /Would you like me to/i,
-  /Should I (continue|proceed|create|add|remove|update)/i,
-  /Can you (tell|clarify|provide|specify)/i,
-  /Which (file|option|approach)/i,
-]
-
 
 // Working indicators - Claude Code specific (including Unicode status chars)
 const WORKING_PATTERNS = [
@@ -247,31 +208,6 @@ export class ClaudeOutputParser {
   }
 
   /**
-   * Detect what type of input the agent is waiting for
-   */
-  private detectWaitingType(text: string): WaitingType {
-    const cleanText = this.stripAnsi(text)
-
-    // Check for tool approval requests
-    for (const pattern of TOOL_APPROVAL_PATTERNS) {
-      if (pattern.test(cleanText)) return 'tool'
-    }
-
-    // Check for questions
-    for (const pattern of QUESTION_PATTERNS) {
-      if (pattern.test(cleanText)) return 'question'
-    }
-
-    // Check for Claude prompt (idle, waiting for next task)
-    // If we see the ❯ prompt at the end of the buffer, Claude is idle
-    if (this.hasSeenClaude && this.isAtIdlePrompt(cleanText)) {
-      return 'prompt'
-    }
-
-    return null
-  }
-
-  /**
    * Check if a line is a status line that should be filtered out
    */
   private isStatusLine(line: string): boolean {
@@ -387,24 +323,15 @@ export class ClaudeOutputParser {
 
     let status: SessionStatus | null = null
     let message: string | null = null
-    let waitingType: WaitingType = null
 
     // Use recent buffer for detection (more reliable than single chunks)
     const recentBuffer = cleanBuffer.slice(-500)
 
-    // Only detect working/waiting states if we've seen Claude
+    // Only detect working/idle states if we've seen Claude
     if (this.hasSeenClaude) {
-      // Check if waiting for input first (takes precedence)
-      waitingType = this.detectWaitingType(recentBuffer)
-      if (waitingType) {
-        // 'prompt' means Claude is at the idle prompt (❯), ready for next task
-        // 'tool' or 'question' means Claude needs user action
-        if (waitingType === 'prompt') {
-          status = 'idle'
-          waitingType = null  // Clear waitingType since we're idle, not waiting
-        } else {
-          status = 'waiting'
-        }
+      // Check if at idle prompt first
+      if (this.isAtIdlePrompt(this.stripAnsi(recentBuffer))) {
+        status = 'idle'
       } else if (this.detectWorking(recentBuffer)) {
         // Check if working - use buffer to avoid chunk boundary issues
         status = 'working'
@@ -436,7 +363,6 @@ export class ClaudeOutputParser {
     return {
       status,
       message,
-      waitingType,
     }
   }
 
@@ -459,7 +385,6 @@ export class ClaudeOutputParser {
     return {
       status: 'idle',
       message: this.lastMessage,
-      waitingType: null,
     }
   }
 

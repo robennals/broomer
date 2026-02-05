@@ -1,5 +1,5 @@
-appId: com.agent-manager.app
-productName: Agent Manager
+appId: com.broomer.app
+productName: Broomer
 directories:
   buildResources: build
 files:

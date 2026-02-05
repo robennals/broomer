@@ -1,5 +1,5 @@
 {
-  "name": "agent-manager",
+  "name": "broomer",
   "version": "1.0.0",
   "description": "Multi-agent session manager for AI coding assistants",
   "type": "module",

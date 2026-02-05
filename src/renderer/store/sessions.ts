@@ -2,9 +2,8 @@ import { create } from 'zustand'
 import { basename } from 'path-browserify'
 import { PANEL_IDS, DEFAULT_TOOLBAR_PANELS } from '../panels/types'
 
-export type SessionStatus = 'working' | 'waiting' | 'idle' | 'error'
+export type SessionStatus = 'working' | 'idle' | 'error'
 export type FileViewerPosition = 'top' | 'left'
-export type WaitingType = 'tool' | 'question' | 'prompt' | null
 
 // Terminal tab types
 export interface TerminalTab {
@@ -54,7 +53,6 @@ export interface Session {
   // Agent monitoring state (runtime only, not persisted)
   lastMessage: string | null
   lastMessageTime: number | null
-  waitingType: WaitingType
   isUnread: boolean
   // Recently opened files (runtime, most recent first)
   recentFiles: string[]
@@ -130,7 +128,7 @@ interface SessionStore {
   updateLayoutSize: (id: string, key: keyof LayoutSizes, value: number) => void
   setExplorerFilter: (id: string, filter: ExplorerFilter) => void
   // Agent monitoring actions
-  updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string; waitingType?: WaitingType }) => void
+  updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string }) => void
   markSessionRead: (id: string) => void
   // Terminal tab actions
   addTerminalTab: (sessionId: string, name?: string) => string
@@ -264,7 +262,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           // Runtime monitoring state
           lastMessage: null,
           lastMessageTime: null,
-          waitingType: null,
           isUnread: false,
           // Recent files
           recentFiles: [],
@@ -325,7 +322,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // Runtime monitoring state
       lastMessage: null,
       lastMessageTime: null,
-      waitingType: null,
       isUnread: false,
       // Recent files
       recentFiles: [],
@@ -514,8 +510,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
   },
 
-  updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string; waitingType?: WaitingType }) => {
-    const { sessions, activeSessionId } = get()
+  updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string }) => {
+    const { sessions } = get()
     const updatedSessions = sessions.map((s) => {
       if (s.id !== id) return s
       const changes: Partial<Session> = {}
@@ -526,14 +522,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         changes.lastMessage = update.lastMessage
         changes.lastMessageTime = Date.now()
       }
-      if (update.waitingType !== undefined) {
-        changes.waitingType = update.waitingType
-      }
-      // Mark as unread if status changes to waiting and this isn't the active session
-      if (update.status === 'waiting' && id !== activeSessionId) {
-        changes.isUnread = true
-      }
-      // Mark as unread when transitioning from working to idle (for all sessions, including active)
+      // Mark as unread when transitioning from working to idle
       // This signals "agent finished doing something" so the user knows to check results
       if (update.status === 'idle' && s.status === 'working') {
         changes.isUnread = true

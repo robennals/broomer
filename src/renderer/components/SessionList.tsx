@@ -1,15 +1,6 @@
-import { useState } from 'react'
-import type { Session, SessionStatus, WaitingType } from '../store/sessions'
-
-interface HooksStatus {
-  needsSetup: boolean
-  configDir?: string
-}
+import type { Session, SessionStatus } from '../store/sessions'
 
 interface SessionListProps {
-  hooksStatus?: HooksStatus
-  onConfigureHooks?: (configDir?: string) => Promise<void>
-  onDismissHooks?: () => void
   sessions: Session[]
   activeSessionId: string | null
   onSelectSession: (id: string) => void
@@ -19,15 +10,8 @@ interface SessionListProps {
 
 const statusLabels: Record<SessionStatus, string> = {
   working: 'Working',
-  waiting: 'Waiting',
   idle: 'Idle',
   error: 'Error',
-}
-
-const waitingTypeIcons: Record<NonNullable<WaitingType>, { icon: string; label: string }> = {
-  tool: { icon: '!', label: 'Tool approval needed' },
-  question: { icon: '?', label: 'Question' },
-  prompt: { icon: '>', label: 'Ready for input' },
 }
 
 function Spinner({ className = '' }: { className?: string }) {
@@ -62,16 +46,6 @@ function StatusIndicator({ status, isUnread }: { status: SessionStatus; isUnread
     return <Spinner className="text-status-working" />
   }
 
-  if (status === 'waiting') {
-    return (
-      <span
-        className={`w-3 h-3 rounded-full bg-status-waiting ${
-          isUnread ? 'animate-pulse shadow-[0_0_8px_2px_rgba(250,204,21,0.6)]' : ''
-        }`}
-      />
-    )
-  }
-
   if (status === 'error') {
     return <span className="w-2 h-2 rounded-full bg-status-error" />
   }
@@ -91,91 +65,14 @@ export default function SessionList({
   onSelectSession,
   onNewSession,
   onDeleteSession,
-  hooksStatus,
-  onConfigureHooks,
-  onDismissHooks,
 }: SessionListProps) {
-  const [isConfiguring, setIsConfiguring] = useState(false)
-  const [configError, setConfigError] = useState<string | null>(null)
-  const [configSuccess, setConfigSuccess] = useState(false)
-
   const handleDelete = (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation()
     onDeleteSession(sessionId)
   }
 
-  const handleConfigureHooks = async () => {
-    if (!onConfigureHooks) return
-    setIsConfiguring(true)
-    setConfigError(null)
-    try {
-      await onConfigureHooks(hooksStatus?.configDir)
-      setConfigSuccess(true)
-      setTimeout(() => {
-        setConfigSuccess(false)
-      }, 2000)
-    } catch (err) {
-      setConfigError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setIsConfiguring(false)
-    }
-  }
-
-  const showPrompt = hooksStatus?.needsSetup && onConfigureHooks && onDismissHooks
-
   return (
     <div className="flex flex-col h-full">
-      {/* Hooks setup banner */}
-      {showPrompt && !configSuccess && (
-        <div className="p-2 bg-yellow-500/10 border-b border-yellow-500/30">
-          <div className="flex items-start gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-400 flex-shrink-0 mt-0.5">
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-yellow-200">
-                Enable hooks for reliable status tracking
-                {hooksStatus?.configDir && hooksStatus.configDir !== '~/.claude' && (
-                  <span className="text-yellow-400/70"> ({hooksStatus.configDir})</span>
-                )}
-              </p>
-              {configError && (
-                <p className="text-xs text-red-400 mt-1">{configError}</p>
-              )}
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={handleConfigureHooks}
-                  disabled={isConfiguring}
-                  className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-200 hover:bg-yellow-500/30 transition-colors disabled:opacity-50"
-                >
-                  {isConfiguring ? 'Setting up...' : 'Enable'}
-                </button>
-                <button
-                  onClick={onDismissHooks}
-                  className="px-2 py-1 text-xs rounded text-text-secondary hover:text-text-primary transition-colors"
-                >
-                  Later
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Success message */}
-      {configSuccess && (
-        <div className="p-2 bg-green-500/10 border-b border-green-500/30">
-          <div className="flex items-center gap-2 text-green-400 text-xs">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            Hooks enabled!
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="p-3 border-b border-border">
         <button
@@ -190,7 +87,6 @@ export default function SessionList({
       <div className="flex-1 overflow-y-auto p-2">
         {sessions.map((session) => {
           const isUnread = session.isUnread === true
-          const waitingInfo = session.waitingType ? waitingTypeIcons[session.waitingType] : null
 
           return (
             <div
@@ -224,19 +120,6 @@ export default function SessionList({
                 }`}>
                   {session.name}
                 </span>
-                {/* Waiting type indicator */}
-                {waitingInfo && session.status === 'waiting' && (
-                  <span
-                    className={`flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${
-                      isUnread
-                        ? 'bg-status-waiting text-bg-primary animate-pulse'
-                        : 'bg-status-waiting/20 text-status-waiting'
-                    }`}
-                    title={waitingInfo.label}
-                  >
-                    {waitingInfo.icon}
-                  </span>
-                )}
                 <button
                   onClick={(e) => handleDelete(e, session.id)}
                   className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-status-error transition-opacity p-1"

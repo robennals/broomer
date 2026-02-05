@@ -110,7 +110,7 @@ interface AppState {
   commandPresets: CommandPreset[];
 }
 
-// Persisted to ~/.agent-manager/config.json
+// Persisted to ~/.broomer/config.json
 interface PersistedConfig {
   sessions: Omit<Session, 'agentPtyId' | 'userPtyId' | 'status'>[];
   commandPresets: CommandPreset[];
@@ -172,7 +172,7 @@ function detectStatus(buffer: string, lastActivity: Date): SessionStatus {
 ## Project Structure
 
 ```
-agent-manager/
+broomer/
 ├── package.json
 ├── vite.config.ts
 ├── electron.vite.config.ts
@@ -223,7 +223,7 @@ agent-manager/
 - Implement session data model
 - Session list UI component
 - Add/remove sessions
-- Session persistence (JSON file to ~/.agent-manager/)
+- Session persistence (JSON file to ~/.broomer/)
 - Command presets (settings UI to add/edit presets)
 - Auto-spawn agent command on session create
 

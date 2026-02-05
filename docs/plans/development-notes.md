@@ -1,4 +1,4 @@
-# Agent Manager - Development Notes
+# Broomer - Development Notes
 
 ## Project Status
 
@@ -85,7 +85,7 @@ preload: {
 ## Project Structure
 
 ```
-agent-manager/
+broomer/
 ├── src/
 │   ├── main/
 │   │   └── index.ts          # Electron main process, PTY management
@@ -138,7 +138,7 @@ pnpm test:headed    # See the app
 ```
 
 ### Test Coverage (23 tests)
-**Agent Manager App**
+**Broomer App**
 - App title and branding
 - New Session button
 - Session list rendering
@@ -241,7 +241,7 @@ window.pty.onExit(id: string, callback: (exitCode: number) => void)
 ### Phase 4: Session Management
 1. Create Zustand store for app state
 2. Add "New Session" dialog with directory picker
-3. Implement session persistence to `~/.agent-manager/config.json`
+3. Implement session persistence to `~/.broomer/config.json`
 4. Command presets UI
 
 ### Phase 5: Git Integration
