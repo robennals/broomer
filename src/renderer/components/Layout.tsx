@@ -18,6 +18,7 @@ interface LayoutProps {
   sidebarWidth: number
   layoutSizes: LayoutSizes
   errorMessage?: string | null
+  title?: string
   // Callbacks
   onSidebarWidthChange: (width: number) => void
   onLayoutSizeChange: (key: keyof LayoutSizes, value: number) => void
@@ -42,6 +43,7 @@ export default function Layout({
   sidebarWidth,
   layoutSizes,
   errorMessage,
+  title,
   onSidebarWidthChange,
   onLayoutSizeChange,
   onTogglePanel,
@@ -357,7 +359,7 @@ export default function Layout({
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         <div className="flex items-center gap-2 pl-16">
-          <span className="text-sm font-medium text-text-primary">Agent Manager</span>
+          <span className="text-sm font-medium text-text-primary">{title || 'Agent Manager'}</span>
           {isDev && (
             <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
               DEV

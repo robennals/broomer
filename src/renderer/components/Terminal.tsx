@@ -281,12 +281,12 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
           isWriting = true
           terminal.write(data, () => {
             isWriting = false
+            // Auto-scroll to bottom if in follow mode - must happen AFTER write
+            // completes so the viewport extent includes the new content
+            if (isFollowingRef.current) {
+              terminal.scrollToBottom()
+            }
           })
-
-          // Auto-scroll to bottom if in follow mode
-          if (isFollowingRef.current) {
-            terminal.scrollToBottom()
-          }
 
           // Simple activity detection: any terminal output = working
           // Just pause briefly after user interaction to avoid false positives

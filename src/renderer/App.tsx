@@ -175,6 +175,11 @@ function AppContent() {
     checkGhAvailability()
   }, [loadSessions, loadAgents, loadRepos, checkGhAvailability])
 
+  // Update window title to show active session name
+  useEffect(() => {
+    document.title = activeSession ? `${activeSession.name} — Agent Manager` : 'Agent Manager'
+  }, [activeSession?.name, activeSession?.id])
+
   // Mark session as read when it becomes active, and focus agent terminal
   useEffect(() => {
     if (activeSessionId) {
@@ -504,6 +509,7 @@ function AppContent() {
         onSidebarWidthChange={setSidebarWidth}
         onLayoutSizeChange={handleLayoutSizeChange}
         errorMessage={activeSession && !activeDirectoryExists ? `Folder not found: ${activeSession.directory}` : null}
+        title={activeSession ? activeSession.name : undefined}
         onTogglePanel={handleTogglePanel}
         onToggleGlobalPanel={toggleGlobalPanel}
         onOpenPanelPicker={() => setShowPanelPicker(true)}

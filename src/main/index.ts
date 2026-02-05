@@ -941,7 +941,7 @@ ipcMain.handle('hooks:configure', async (_event, configDir?: string) => {
       hooks: [
         {
           type: 'command',
-          command: `${hookScript} ${eventType}`
+          command: `"${hookScript}" ${eventType}`
         }
       ]
     })

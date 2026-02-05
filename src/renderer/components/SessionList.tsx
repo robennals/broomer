@@ -191,8 +191,6 @@ export default function SessionList({
         {sessions.map((session) => {
           const isUnread = session.isUnread === true
           const waitingInfo = session.waitingType ? waitingTypeIcons[session.waitingType] : null
-          const needsAttention = session.status === 'waiting' && isUnread
-          const hasUpdate = session.status === 'idle' && isUnread
 
           return (
             <div
@@ -214,19 +212,15 @@ export default function SessionList({
                   onDeleteSession(session.id)
                 }
               }}
-              className={`group relative w-full text-left p-3 rounded mb-1 transition-all cursor-pointer outline-none focus:bg-accent/15 ${
-                session.id === activeSessionId ? 'bg-bg-tertiary' : 'hover:bg-bg-tertiary/50'
-              } ${needsAttention ? 'bg-status-waiting/10 border-l-2 border-status-waiting' : ''} ${
-                hasUpdate ? 'bg-green-400/10 border-l-2 border-green-400' : ''
-              } ${isUnread && !needsAttention && !hasUpdate ? 'border-l-2 border-status-waiting/50' : ''}`}
+              className={`group relative w-full text-left p-3 rounded mb-1 transition-all cursor-pointer outline-none focus:ring-1 focus:ring-accent/50 ${
+                session.id === activeSessionId ? 'bg-accent/15' : 'hover:bg-bg-tertiary/50'
+              }`}
             >
               <div className="flex items-center gap-2 mb-1">
                 {/* Status indicator */}
                 <StatusIndicator status={session.status} isUnread={isUnread} />
-                <span className={`font-medium text-sm truncate flex-1 ${
-                  needsAttention ? 'text-status-waiting font-semibold' :
-                  hasUpdate ? 'text-green-400 font-semibold' :
-                  isUnread ? 'text-text-primary font-semibold' : 'text-text-primary'
+                <span className={`text-sm truncate flex-1 text-text-primary ${
+                  isUnread ? 'font-bold' : 'font-medium'
                 }`}>
                   {session.name}
                 </span>
@@ -234,7 +228,7 @@ export default function SessionList({
                 {waitingInfo && session.status === 'waiting' && (
                   <span
                     className={`flex items-center justify-center w-5 h-5 rounded text-xs font-bold ${
-                      needsAttention
+                      isUnread
                         ? 'bg-status-waiting text-bg-primary animate-pulse'
                         : 'bg-status-waiting/20 text-status-waiting'
                     }`}
@@ -270,8 +264,6 @@ export default function SessionList({
               {/* Last message preview */}
               {session.lastMessage ? (
                 <div className={`text-xs mt-1 truncate ${
-                  needsAttention ? 'text-status-waiting/80' :
-                  hasUpdate ? 'text-green-400/70' :
                   isUnread ? 'text-text-secondary' : 'text-text-secondary/60'
                 }`}>
                   "{session.lastMessage}"
