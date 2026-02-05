@@ -64,6 +64,7 @@ export type ManagedRepo = {
   remoteUrl: string
   rootDir: string
   defaultBranch: string
+  defaultAgentId?: string  // Default agent for sessions in this repo
 }
 
 export type GitHubIssue = {
@@ -120,6 +121,7 @@ export type GitApi = {
   remoteUrl: (repoPath: string) => Promise<string | null>
   branchChanges: (repoPath: string, baseBranch?: string) => Promise<{ files: { path: string; status: string }[]; baseBranch: string }>
   headCommit: (repoPath: string) => Promise<string | null>
+  listBranches: (repoPath: string) => Promise<{ name: string; isRemote: boolean; current: boolean }[]>
 }
 
 export type GhApi = {
@@ -260,6 +262,7 @@ const gitApi: GitApi = {
   remoteUrl: (repoPath) => ipcRenderer.invoke('git:remoteUrl', repoPath),
   branchChanges: (repoPath, baseBranch) => ipcRenderer.invoke('git:branchChanges', repoPath, baseBranch),
   headCommit: (repoPath) => ipcRenderer.invoke('git:headCommit', repoPath),
+  listBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
 }
 
 const ghApi: GhApi = {

@@ -885,6 +885,42 @@ ipcMain.handle('git:headCommit', async (_event, repoPath: string) => {
   }
 })
 
+ipcMain.handle('git:listBranches', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return [
+      { name: 'main', isRemote: false, current: true },
+      { name: 'feature/auth', isRemote: false, current: false },
+      { name: 'origin/main', isRemote: true, current: false },
+      { name: 'origin/feature/old-branch', isRemote: true, current: false },
+    ]
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    const branchSummary = await git.branch(['-a'])
+
+    const branches: { name: string; isRemote: boolean; current: boolean }[] = []
+
+    for (const [name, data] of Object.entries(branchSummary.branches)) {
+      // Skip HEAD references
+      if (name.includes('HEAD')) continue
+
+      const isRemote = name.startsWith('remotes/')
+      const cleanName = isRemote ? name.replace('remotes/', '') : name
+
+      branches.push({
+        name: cleanName,
+        isRemote,
+        current: data.current,
+      })
+    }
+
+    return branches
+  } catch {
+    return []
+  }
+})
+
 ipcMain.handle('git:branchChanges', async (_event, repoPath: string, baseBranch?: string) => {
   if (isE2ETest) {
     return {

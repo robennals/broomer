@@ -19,6 +19,7 @@ interface RepoStore {
 
   loadRepos: () => Promise<void>
   addRepo: (repo: Omit<ManagedRepo, 'id'>) => Promise<void>
+  updateRepo: (id: string, updates: Partial<Omit<ManagedRepo, 'id'>>) => Promise<void>
   removeRepo: (id: string) => Promise<void>
   setDefaultCloneDir: (dir: string) => Promise<void>
   checkGhAvailability: () => Promise<void>
@@ -53,6 +54,20 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
 
     const { repos } = get()
     const updatedRepos = [...repos, repo]
+    set({ repos: updatedRepos })
+
+    const config = await window.config.load()
+    await window.config.save({
+      ...config,
+      repos: updatedRepos,
+    })
+  },
+
+  updateRepo: async (id, updates) => {
+    const { repos } = get()
+    const updatedRepos = repos.map((r) =>
+      r.id === id ? { ...r, ...updates } : r
+    )
     set({ repos: updatedRepos })
 
     const config = await window.config.load()
