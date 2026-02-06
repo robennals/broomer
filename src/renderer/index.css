@@ -57,6 +57,13 @@ body {
   border-color: rgba(59, 130, 246, 0.4);
 }
 
+/* Search highlight in Monaco editor */
+.searchHighlight {
+  background-color: rgba(255, 213, 0, 0.3);
+  border: 1px solid rgba(255, 213, 0, 0.6);
+  border-radius: 2px;
+}
+
 /* Draggable region for window */
 .titlebar-drag-region {
   -webkit-app-region: drag;
