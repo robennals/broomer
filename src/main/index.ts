@@ -1090,8 +1090,10 @@ ipcMain.handle('git:isMergedInto', async (_event, repoPath: string, ref: string)
 
   try {
     const git = simpleGit(expandHomePath(repoPath))
-    await git.raw(['merge-base', '--is-ancestor', 'HEAD', `origin/${ref}`])
-    return true
+    // Use rev-list --count instead of merge-base --is-ancestor
+    // because --is-ancestor communicates via exit codes which simple-git may not handle reliably
+    const output = await git.raw(['rev-list', '--count', 'HEAD', `^origin/${ref}`])
+    return parseInt(output.trim(), 10) === 0
   } catch {
     return false
   }
