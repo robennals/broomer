@@ -28,6 +28,7 @@
     "node-pty": "^1.0.0",
     "path-browserify": "^1.0.1",
     "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "simple-git": "^3.22.0",
     "zustand": "^4.4.7"
   },

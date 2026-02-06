@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import Editor, { loader, Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
@@ -132,10 +132,17 @@ const getLanguageFromPath = (filePath: string): string => {
   return languageMap[ext] || 'plaintext'
 }
 
-function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange }: FileViewerComponentProps) {
+function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange, scrollToLine, searchHighlight }: FileViewerComponentProps) {
   const language = getLanguageFromPath(filePath)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const originalContentRef = useRef(content)
+  const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  const scrollToLineRef = useRef(scrollToLine)
+  const searchHighlightRef = useRef(searchHighlight)
+
+  // Keep refs in sync
+  scrollToLineRef.current = scrollToLine
+  searchHighlightRef.current = searchHighlight
 
   // Update original content when file changes
   useEffect(() => {
@@ -143,8 +150,54 @@ function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange }: Fil
     onDirtyChange?.(false, content)
   }, [content, filePath])
 
+  // Shared function to scroll and highlight
+  const applyScrollAndHighlight = useCallback((editor: monaco.editor.IStandaloneCodeEditor) => {
+    const line = scrollToLineRef.current
+    const highlight = searchHighlightRef.current
+    if (!line) return
+
+    editor.revealLineInCenter(line)
+
+    if (highlight) {
+      const model = editor.getModel()
+      if (model) {
+        const lineContent = model.getLineContent(line)
+        const matchIndex = lineContent.toLowerCase().indexOf(highlight.toLowerCase())
+        if (matchIndex !== -1) {
+          const startColumn = matchIndex + 1
+          const endColumn = startColumn + highlight.length
+          editor.setSelection(new monaco.Range(line, startColumn, line, endColumn))
+          if (decorationsRef.current) {
+            decorationsRef.current.clear()
+          }
+          decorationsRef.current = editor.createDecorationsCollection([{
+            range: new monaco.Range(line, startColumn, line, endColumn),
+            options: {
+              className: 'searchHighlight',
+              isWholeLine: false,
+            }
+          }])
+        }
+      }
+    }
+  }, [])
+
+  // Scroll to line and highlight when props change (editor already mounted)
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor || !scrollToLine) return
+    // Delay to let Monaco update its model content after a value change
+    const timer = setTimeout(() => applyScrollAndHighlight(editor), 100)
+    return () => clearTimeout(timer)
+  }, [scrollToLine, searchHighlight, content, applyScrollAndHighlight])
+
   const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
     editorRef.current = editor
+    // Apply pending scroll/highlight now that the editor is ready
+    if (scrollToLineRef.current) {
+      // Monaco editor is ready at onMount, but give it a moment for layout
+      setTimeout(() => applyScrollAndHighlight(editor), 150)
+    }
 
     // Add Cmd/Ctrl+S save handler
     editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {

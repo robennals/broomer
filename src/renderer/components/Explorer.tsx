@@ -17,7 +17,7 @@ type PrComment = {
 
 interface ExplorerProps {
   directory?: string
-  onFileSelect?: (filePath: string, openInDiffMode: boolean) => void
+  onFileSelect?: (filePath: string, openInDiffMode: boolean, scrollToLine?: number, searchHighlight?: string, diffBaseRef?: string) => void
   selectedFilePath?: string | null
   gitStatus?: GitFileStatus[]
   syncStatus?: GitStatusResult | null
@@ -948,7 +948,7 @@ export default function Explorer({
                   title={`${file.path} — ${statusLabel(file.status)}`}
                   onClick={() => {
                     if (onFileSelect && directory) {
-                      onFileSelect(`${directory}/${file.path}`, file.status === 'modified')
+                      onFileSelect(`${directory}/${file.path}`, true, undefined, undefined, `origin/${branchBaseName}`)
                     }
                   }}
                 >
@@ -1198,9 +1198,10 @@ export default function Explorer({
                   {result.contentMatches.map((match, i) => (
                     <div
                       key={`${result.path}-${match.line}-${i}`}
-                      className="py-0.5 hover:bg-bg-tertiary cursor-pointer text-xs text-text-secondary"
+                      className="py-0.5 hover:bg-bg-tertiary cursor-pointer text-xs text-text-secondary truncate"
                       style={{ paddingLeft: `${(isRoot ? depth : depth + 1) * 16 + 28}px` }}
-                      onClick={() => onFileSelect?.(result.path, false)}
+                      onClick={() => onFileSelect?.(result.path, false, match.line, searchQuery)}
+                      title={`${match.line}: ${match.text}`}
                     >
                       <span className="text-text-secondary opacity-60 mr-2">{match.line}:</span>
                       <span className="text-text-primary">{match.text}</span>
