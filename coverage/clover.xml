@@ -1,19 +1,45 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1770358993084" clover="3.2.0">
-  <project timestamp="1770358993084" name="All files">
-    <metrics statements="479" coveredstatements="464" conditionals="276" coveredconditionals="221" methods="143" coveredmethods="140" elements="898" coveredelements="825" complexity="0" loc="479" ncloc="479" packages="4" files="11" classes="11"/>
-    <package name="components.fileViewers">
-      <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="2" coveredmethods="2"/>
-      <file name="types.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/components/fileViewers/types.ts">
-        <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="2" coveredmethods="2"/>
-        <line num="29" count="11" type="cond" truecount="2" falsecount="0"/>
-        <line num="34" count="4" type="stmt"/>
-        <line num="35" count="4" type="stmt"/>
+<coverage generated="1770360029291" clover="3.2.0">
+  <project timestamp="1770360029291" name="All files">
+    <metrics statements="538" coveredstatements="523" conditionals="340" coveredconditionals="285" methods="159" coveredmethods="156" elements="1037" coveredelements="964" complexity="0" loc="538" ncloc="538" packages="5" files="14" classes="14"/>
+    <package name="main">
+      <metrics statements="20" coveredstatements="20" conditionals="25" coveredconditionals="25" methods="3" coveredmethods="3"/>
+      <file name="gitStatusParser.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/main/gitStatusParser.ts">
+        <metrics statements="20" coveredstatements="20" conditionals="25" coveredconditionals="25" methods="3" coveredmethods="3"/>
+        <line num="5" count="20" type="cond" truecount="6" falsecount="0"/>
+        <line num="6" count="6" type="stmt"/>
+        <line num="7" count="3" type="stmt"/>
+        <line num="8" count="4" type="stmt"/>
+        <line num="9" count="2" type="stmt"/>
+        <line num="10" count="2" type="stmt"/>
+        <line num="11" count="3" type="stmt"/>
+        <line num="28" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="30" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="31" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="33" count="10" type="stmt"/>
+        <line num="35" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="36" count="6" type="stmt"/>
+        <line num="39" count="10" type="cond" truecount="5" falsecount="0"/>
+        <line num="40" count="6" type="stmt"/>
+        <line num="41" count="4" type="cond" truecount="4" falsecount="0"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="46" count="10" type="stmt"/>
+        <line num="53" count="6" type="stmt"/>
       </file>
     </package>
-    <package name="panels">
+    <package name="renderer.components.fileViewers">
+      <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="2" coveredmethods="2"/>
+      <file name="types.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/components/fileViewers/types.ts">
+        <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="2" coveredmethods="2"/>
+        <line num="33" count="11" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="4" type="stmt"/>
+        <line num="39" count="4" type="stmt"/>
+      </file>
+    </package>
+    <package name="renderer.panels">
       <metrics statements="22" coveredstatements="22" conditionals="2" coveredconditionals="2" methods="14" coveredmethods="14"/>
-      <file name="registry.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/panels/registry.ts">
+      <file name="registry.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/panels/registry.ts">
         <metrics statements="19" coveredstatements="19" conditionals="2" coveredconditionals="2" methods="14" coveredmethods="14"/>
         <line num="4" count="12" type="stmt"/>
         <line num="7" count="15" type="stmt"/>
@@ -35,16 +61,16 @@
         <line num="50" count="4" type="stmt"/>
         <line num="55" count="1" type="stmt"/>
       </file>
-      <file name="types.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/panels/types.ts">
+      <file name="types.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/panels/types.ts">
         <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
         <line num="29" count="2" type="stmt"/>
         <line num="41" count="2" type="stmt"/>
         <line num="51" count="2" type="stmt"/>
       </file>
     </package>
-    <package name="store">
+    <package name="renderer.store">
       <metrics statements="309" coveredstatements="300" conditionals="168" coveredconditionals="125" methods="105" coveredmethods="102"/>
-      <file name="agents.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/store/agents.ts">
+      <file name="agents.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/store/agents.ts">
         <metrics statements="26" coveredstatements="26" conditionals="8" coveredconditionals="6" methods="8" coveredmethods="8"/>
         <line num="18" count="1" type="stmt"/>
         <line num="20" count="1" type="stmt"/>
@@ -73,7 +99,7 @@
         <line num="78" count="1" type="stmt"/>
         <line num="79" count="1" type="stmt"/>
       </file>
-      <file name="errors.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/store/errors.ts">
+      <file name="errors.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/store/errors.ts">
         <metrics statements="9" coveredstatements="9" conditionals="0" coveredconditionals="0" methods="9" coveredmethods="9"/>
         <line num="20" count="69" type="stmt"/>
         <line num="22" count="1" type="stmt"/>
@@ -85,7 +111,7 @@
         <line num="46" count="1" type="stmt"/>
         <line num="50" count="1" type="stmt"/>
       </file>
-      <file name="profiles.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/store/profiles.ts">
+      <file name="profiles.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/store/profiles.ts">
         <metrics statements="32" coveredstatements="32" conditionals="10" coveredconditionals="9" methods="11" coveredmethods="11"/>
         <line num="19" count="1" type="stmt"/>
         <line num="23" count="3" type="stmt"/>
@@ -120,7 +146,7 @@
         <line num="89" count="1" type="stmt"/>
         <line num="93" count="1" type="stmt"/>
       </file>
-      <file name="repos.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/store/repos.ts">
+      <file name="repos.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/store/repos.ts">
         <metrics statements="41" coveredstatements="41" conditionals="16" coveredconditionals="13" methods="11" coveredmethods="11"/>
         <line num="4" count="1" type="stmt"/>
         <line num="8" count="3" type="cond" truecount="4" falsecount="0"/>
@@ -143,12 +169,12 @@
         <line num="63" count="1" type="stmt"/>
         <line num="65" count="1" type="stmt"/>
         <line num="66" count="1" type="stmt"/>
-        <line num="74" count="1" type="stmt"/>
-        <line num="75" count="1" type="stmt"/>
-        <line num="76" count="1" type="cond" truecount="1" falsecount="1"/>
-        <line num="78" count="1" type="stmt"/>
-        <line num="80" count="1" type="stmt"/>
-        <line num="81" count="1" type="stmt"/>
+        <line num="74" count="4" type="stmt"/>
+        <line num="75" count="4" type="stmt"/>
+        <line num="76" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="78" count="4" type="stmt"/>
+        <line num="80" count="4" type="stmt"/>
+        <line num="81" count="4" type="stmt"/>
         <line num="89" count="1" type="stmt"/>
         <line num="90" count="2" type="stmt"/>
         <line num="91" count="1" type="stmt"/>
@@ -164,7 +190,7 @@
         <line num="117" count="2" type="stmt"/>
         <line num="119" count="1" type="stmt"/>
       </file>
-      <file name="sessions.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/store/sessions.ts">
+      <file name="sessions.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/store/sessions.ts">
         <metrics statements="201" coveredstatements="192" conditionals="134" coveredconditionals="97" methods="66" coveredmethods="63"/>
         <line num="67" count="1" type="stmt"/>
         <line num="74" count="1" type="stmt"/>
@@ -369,9 +395,9 @@
         <line num="726" count="1" type="stmt"/>
       </file>
     </package>
-    <package name="utils">
-      <metrics statements="145" coveredstatements="139" conditionals="104" coveredconditionals="92" methods="22" coveredmethods="22"/>
-      <file name="claudeOutputParser.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/utils/claudeOutputParser.ts">
+    <package name="renderer.utils">
+      <metrics statements="184" coveredstatements="178" conditionals="143" coveredconditionals="131" methods="35" coveredmethods="35"/>
+      <file name="claudeOutputParser.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/utils/claudeOutputParser.ts">
         <metrics statements="132" coveredstatements="126" conditionals="100" coveredconditionals="88" methods="17" coveredmethods="17"/>
         <line num="9" count="1" type="stmt"/>
         <line num="14" count="1" type="stmt"/>
@@ -506,12 +532,48 @@
         <line num="415" count="0" type="stmt"/>
         <line num="416" count="0" type="stmt"/>
       </file>
-      <file name="slugify.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/utils/slugify.ts">
+      <file name="explorerHelpers.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/utils/explorerHelpers.ts">
+        <metrics statements="33" coveredstatements="33" conditionals="26" coveredconditionals="26" methods="11" coveredmethods="11"/>
+        <line num="5" count="7" type="cond" truecount="6" falsecount="0"/>
+        <line num="6" count="1" type="stmt"/>
+        <line num="7" count="1" type="stmt"/>
+        <line num="8" count="1" type="stmt"/>
+        <line num="9" count="1" type="stmt"/>
+        <line num="10" count="1" type="stmt"/>
+        <line num="11" count="2" type="stmt"/>
+        <line num="19" count="7" type="cond" truecount="6" falsecount="0"/>
+        <line num="20" count="1" type="stmt"/>
+        <line num="21" count="1" type="stmt"/>
+        <line num="22" count="1" type="stmt"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="24" count="1" type="stmt"/>
+        <line num="25" count="2" type="stmt"/>
+        <line num="33" count="6" type="stmt"/>
+        <line num="40" count="6" type="cond" truecount="6" falsecount="0"/>
+        <line num="41" count="1" type="stmt"/>
+        <line num="42" count="1" type="stmt"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="44" count="1" type="stmt"/>
+        <line num="45" count="1" type="stmt"/>
+        <line num="46" count="1" type="stmt"/>
+        <line num="54" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="55" count="2" type="stmt"/>
+        <line num="62" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="69" count="5" type="stmt"/>
+        <line num="70" count="9" type="stmt"/>
+        <line num="71" count="9" type="stmt"/>
+        <line num="79" count="4" type="stmt"/>
+        <line num="86" count="4" type="cond" truecount="3" falsecount="0"/>
+        <line num="87" count="1" type="stmt"/>
+        <line num="88" count="1" type="stmt"/>
+        <line num="89" count="2" type="stmt"/>
+      </file>
+      <file name="slugify.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/utils/slugify.ts">
         <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
         <line num="2" count="6" type="stmt"/>
         <line num="9" count="6" type="stmt"/>
       </file>
-      <file name="terminalBufferRegistry.ts" path="/Users/robennals/broomer-repos/broomer/cleanup/tests/src/renderer/utils/terminalBufferRegistry.ts">
+      <file name="terminalBufferRegistry.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/utils/terminalBufferRegistry.ts">
         <metrics statements="11" coveredstatements="11" conditionals="4" coveredconditionals="4" methods="4" coveredmethods="4"/>
         <line num="6" count="1" type="stmt"/>
         <line num="8" count="1" type="stmt"/>
@@ -524,6 +586,15 @@
         <line num="27" count="2" type="stmt"/>
         <line num="28" count="2" type="stmt"/>
         <line num="29" count="2" type="stmt"/>
+      </file>
+      <file name="textDetection.ts" path="/Users/robennals/broomer-repos/broomer/fix-prs/src/renderer/utils/textDetection.ts">
+        <metrics statements="6" coveredstatements="6" conditionals="13" coveredconditionals="13" methods="2" coveredmethods="2"/>
+        <line num="6" count="11" type="cond" truecount="4" falsecount="0"/>
+        <line num="8" count="10" type="cond" truecount="2" falsecount="0"/>
+        <line num="10" count="9" type="stmt"/>
+        <line num="11" count="376" type="stmt"/>
+        <line num="12" count="376" type="cond" truecount="7" falsecount="0"/>
+        <line num="14" count="9" type="stmt"/>
       </file>
     </package>
   </project>

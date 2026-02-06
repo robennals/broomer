@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { FileEntry, GitFileStatus, GitStatusResult, SearchResult, GitHubPrStatus } from '../../preload/index'
 import type { ExplorerFilter } from '../store/sessions'
 import { useRepoStore } from '../store/repos'
+import { statusLabel, getStatusColor, statusBadgeColor, prStateBadgeClass } from '../utils/explorerHelpers'
 
 // PR comment type from GitHub API
 type PrComment = {
@@ -76,41 +77,16 @@ const RecentIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
-const statusLabel = (status: string): string => {
-  switch (status) {
-    case 'modified': return 'Modified'
-    case 'added': return 'Added'
-    case 'deleted': return 'Deleted'
-    case 'untracked': return 'Untracked'
-    case 'renamed': return 'Renamed'
-    default: return status
-  }
-}
+// statusLabel imported from utils/explorerHelpers
 
 // Status letter badge
 const StatusBadge = ({ status }: { status: string }) => {
   const letter = status.charAt(0).toUpperCase()
-  let color = 'text-text-secondary'
-  switch (status) {
-    case 'modified': color = 'text-yellow-400'; break
-    case 'added': color = 'text-green-400'; break
-    case 'deleted': color = 'text-red-400'; break
-    case 'untracked': color = 'text-gray-400'; break
-    case 'renamed': color = 'text-blue-400'; break
-  }
+  const color = statusBadgeColor(status)
   return <span className={`text-xs font-mono ${color}`} title={statusLabel(status)}>{letter}</span>
 }
 
-const getStatusColor = (status?: string): string => {
-  switch (status) {
-    case 'modified': return 'text-yellow-400'
-    case 'added': return 'text-green-400'
-    case 'deleted': return 'text-red-400'
-    case 'untracked': return 'text-gray-400'
-    case 'renamed': return 'text-blue-400'
-    default: return 'text-text-primary'
-  }
-}
+// getStatusColor imported from utils/explorerHelpers
 
 export default function Explorer({
   directory,
@@ -818,11 +794,7 @@ export default function Explorer({
         ) : prStatus ? (
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                prStatus.state === 'OPEN' ? 'bg-green-500/20 text-green-400' :
-                prStatus.state === 'MERGED' ? 'bg-purple-500/20 text-purple-400' :
-                'bg-red-500/20 text-red-400'
-              }`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${prStateBadgeClass(prStatus.state)}`}>
                 {prStatus.state}
               </span>
               <button
