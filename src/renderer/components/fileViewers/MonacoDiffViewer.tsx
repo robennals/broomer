@@ -11,7 +11,7 @@ interface MonacoDiffViewerProps {
   modifiedContent: string
   language?: string
   sideBySide?: boolean
-  targetLine?: number
+  scrollToLine?: number
 }
 
 // Map file extensions to Monaco language IDs
@@ -74,27 +74,27 @@ export default function MonacoDiffViewer({
   modifiedContent,
   language,
   sideBySide = true,
-  targetLine
+  scrollToLine
 }: MonacoDiffViewerProps) {
   const detectedLanguage = language || getLanguageFromPath(filePath)
   const diffEditorRef = useRef<monacoEditor.editor.IStandaloneDiffEditor | null>(null)
 
   const handleDiffEditorMount = (editor: monacoEditor.editor.IStandaloneDiffEditor) => {
     diffEditorRef.current = editor
-    if (targetLine) {
+    if (scrollToLine) {
       const modifiedEditor = editor.getModifiedEditor()
-      modifiedEditor.revealLineInCenter(targetLine)
-      modifiedEditor.setPosition({ lineNumber: targetLine, column: 1 })
+      modifiedEditor.revealLineInCenter(scrollToLine)
+      modifiedEditor.setPosition({ lineNumber: scrollToLine, column: 1 })
     }
   }
 
   useEffect(() => {
-    if (targetLine && diffEditorRef.current) {
+    if (scrollToLine && diffEditorRef.current) {
       const modifiedEditor = diffEditorRef.current.getModifiedEditor()
-      modifiedEditor.revealLineInCenter(targetLine)
-      modifiedEditor.setPosition({ lineNumber: targetLine, column: 1 })
+      modifiedEditor.revealLineInCenter(scrollToLine)
+      modifiedEditor.setPosition({ lineNumber: scrollToLine, column: 1 })
     }
-  }, [targetLine, filePath])
+  }, [scrollToLine, filePath])
 
   return (
     <div className="h-full flex flex-col">
