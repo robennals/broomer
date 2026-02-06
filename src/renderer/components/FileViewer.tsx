@@ -515,6 +515,7 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
             originalContent={originalContent}
             modifiedContent={fileStatus === 'deleted' ? '' : content}
             sideBySide={diffSideBySide}
+            scrollToLine={scrollToLine}
           />
         ) : (
           <ViewerComponent

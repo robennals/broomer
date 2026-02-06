@@ -59,7 +59,7 @@ function AppContent() {
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
-  const { repos, loadRepos, checkGhAvailability } = useRepoStore()
+  const { loadRepos, checkGhAvailability } = useRepoStore()
   const { currentProfileId, profiles, loadProfiles, switchProfile } = useProfileStore()
   const { addError } = useErrorStore()
   const currentProfile = profiles.find((p) => p.id === currentProfileId)
@@ -486,7 +486,7 @@ function AppContent() {
         onClearPushToMain={() => activeSessionId && clearPushToMain(activeSessionId)}
         branchStatus={activeSession?.branchStatus ?? 'in-progress'}
         onUpdatePrState={(prState, prNumber, prUrl) => activeSessionId && updatePrState(activeSessionId, prState, prNumber, prUrl)}
-        allowPushToMain={activeSession?.repoId ? repos.find(r => r.id === activeSession.repoId)?.allowPushToMain : undefined}
+        repoId={activeSession?.repoId}
       />
     ) : null,
     [PANEL_IDS.FILE_VIEWER]: activeSession?.showFileViewer ? (
@@ -525,7 +525,6 @@ function AppContent() {
     agentTerminalPanel,
     userTerminalPanel,
     handleToggleFileViewer,
-    repos,
   ])
 
   if (isLoading) {

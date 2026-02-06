@@ -25,6 +25,9 @@ export default defineConfig({
         'src/renderer/store/profiles.ts',
         'src/renderer/store/repos.ts',
         'src/renderer/store/sessions.ts',
+        'src/main/gitStatusParser.ts',
+        'src/renderer/utils/explorerHelpers.ts',
+        'src/renderer/utils/textDetection.ts',
       ],
       thresholds: {
         lines: 90,

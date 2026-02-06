@@ -65,7 +65,7 @@ export type ManagedRepo = {
   rootDir: string
   defaultBranch: string
   defaultAgentId?: string  // Default agent for sessions in this repo
-  allowPushToMain?: boolean  // Override write-access check for push-to-main button
+  allowPushToMain?: boolean  // Whether "Push to main" button is shown for this repo
 }
 
 export type GitHubIssue = {
@@ -144,6 +144,7 @@ export type ReposApi = {
 
 export type ShellApi = {
   exec: (command: string, cwd: string) => Promise<{ success: boolean; stdout: string; stderr: string; exitCode: number }>
+  openExternal: (url: string) => Promise<void>
 }
 
 export type AgentData = {
@@ -308,6 +309,7 @@ const reposApi: ReposApi = {
 
 const shellApi: ShellApi = {
   exec: (command, cwd) => ipcRenderer.invoke('shell:exec', command, cwd),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 }
 
 const configApi: ConfigApi = {

@@ -98,6 +98,36 @@ describe('useRepoStore', () => {
       expect(useRepoStore.getState().repos[0].name).toBe('updated')
       expect(window.config.save).toHaveBeenCalled()
     })
+
+    it('updates allowPushToMain and persists', async () => {
+      useRepoStore.setState({
+        repos: [{ id: 'r1', name: 'repo', remoteUrl: 'url', rootDir: '/root', defaultBranch: 'main' }],
+      })
+
+      await useRepoStore.getState().updateRepo('r1', { allowPushToMain: true })
+      expect(useRepoStore.getState().repos[0].allowPushToMain).toBe(true)
+      expect(window.config.save).toHaveBeenCalled()
+    })
+
+    it('sets allowPushToMain to false', async () => {
+      useRepoStore.setState({
+        repos: [{ id: 'r1', name: 'repo', remoteUrl: 'url', rootDir: '/root', defaultBranch: 'main', allowPushToMain: true }],
+      })
+
+      await useRepoStore.getState().updateRepo('r1', { allowPushToMain: false })
+      expect(useRepoStore.getState().repos[0].allowPushToMain).toBe(false)
+    })
+
+    it('preserves allowPushToMain when updating other fields', async () => {
+      useRepoStore.setState({
+        repos: [{ id: 'r1', name: 'repo', remoteUrl: 'url', rootDir: '/root', defaultBranch: 'main', allowPushToMain: true }],
+      })
+
+      await useRepoStore.getState().updateRepo('r1', { name: 'updated' })
+      const repo = useRepoStore.getState().repos[0]
+      expect(repo.name).toBe('updated')
+      expect(repo.allowPushToMain).toBe(true)
+    })
   })
 
   describe('removeRepo', () => {

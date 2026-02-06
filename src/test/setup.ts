@@ -57,6 +57,38 @@ const mockGh = {
   replyToComment: vi.fn().mockResolvedValue({ success: true }),
 }
 
+// Mock window.shell
+const mockShell = {
+  openExternal: vi.fn().mockResolvedValue(undefined),
+}
+
+// Mock window.repos
+const mockRepos = {
+  getInitScript: vi.fn().mockResolvedValue(''),
+  saveInitScript: vi.fn().mockResolvedValue({ success: true }),
+}
+
+// Mock window.menu
+const mockMenu = {
+  popup: vi.fn().mockResolvedValue(null),
+}
+
+// Mock window.fs
+const mockFs = {
+  readDir: vi.fn().mockResolvedValue([]),
+  readFile: vi.fn().mockResolvedValue(''),
+  writeFile: vi.fn().mockResolvedValue({ success: true }),
+  appendFile: vi.fn().mockResolvedValue({ success: true }),
+  readFileBase64: vi.fn().mockResolvedValue(''),
+  exists: vi.fn().mockResolvedValue(true),
+  mkdir: vi.fn().mockResolvedValue({ success: true }),
+  createFile: vi.fn().mockResolvedValue({ success: true }),
+  search: vi.fn().mockResolvedValue([]),
+  watch: vi.fn().mockResolvedValue({ success: true }),
+  unwatch: vi.fn().mockResolvedValue({ success: true }),
+  onChange: vi.fn().mockReturnValue(() => {}),
+}
+
 // Mock window.location
 const mockLocation = {
   search: '',
@@ -78,6 +110,10 @@ Object.defineProperty(globalThis, 'window', {
     app: mockApp,
     profiles: mockProfiles,
     gh: mockGh,
+    shell: mockShell,
+    repos: mockRepos,
+    menu: mockMenu,
+    fs: mockFs,
     location: mockLocation,
   },
   writable: true,
