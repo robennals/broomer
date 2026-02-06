@@ -28,8 +28,18 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const lastUserInputRef = useRef<number>(0)
   const lastInteractionRef = useRef<number>(0)
   const ptyIdRef = useRef<string | null>(null)
+  const commandRef = useRef(command)
+  commandRef.current = command
+  const envRef = useRef(env)
+  envRef.current = env
+  const isAgentTerminalRef = useRef(isAgentTerminal)
+  isAgentTerminalRef.current = isAgentTerminal
+  const cwdRef = useRef(cwd)
+  cwdRef.current = cwd
   const [showScrollButton, setShowScrollButton] = useState(false)
   const { addError } = useErrorStore()
+  const addErrorRef = useRef(addError)
+  addErrorRef.current = addError
   const updateAgentMonitor = useSessionStore((state) => state.updateAgentMonitor)
   const markSessionRead = useSessionStore((state) => state.markSessionRead)
 
@@ -73,6 +83,11 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   useEffect(() => {
     if (!containerRef.current || !sessionId) return
 
+    // Capture ref values at effect creation time — these won't change for a given session
+    const isAgent = isAgentTerminalRef.current
+    const cmd = commandRef.current
+    const envVars = envRef.current
+    const effectCwd = cwdRef.current
     const effectStartTime = Date.now()
 
     const terminal = new XTerm({
@@ -118,7 +133,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
     terminal.open(containerRef.current)
 
-    if (isAgentTerminal && sessionId) {
+    if (isAgent && sessionId) {
       terminalBufferRegistry.register(sessionId, () => {
         try {
           return serializeAddon.serialize()
@@ -193,7 +208,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     const id = `${sessionId}-${Date.now()}`
     ptyIdRef.current = id
 
-    window.pty.create({ id, cwd, command, sessionId, env })
+    window.pty.create({ id, cwd: effectCwd, command: cmd, sessionId, env: envVars })
       .then(() => {
         terminal.onData((data) => {
           lastUserInputRef.current = Date.now()
@@ -207,7 +222,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
           terminal.write(data)
 
           // Activity detection for agent terminals
-          if (isAgentTerminal && data.length > 0 && (Date.now() - effectStartTime >= 5000)) {
+          if (isAgent && data.length > 0 && (Date.now() - effectStartTime >= 5000)) {
             const now = Date.now()
             const timeSinceInput = now - lastUserInputRef.current
             const timeSinceInteraction = now - lastInteractionRef.current
@@ -240,7 +255,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
         const removeExitListener = window.pty.onExit(id, (exitCode) => {
           terminal.write(`\r\n[Process exited with code ${exitCode}]\r\n`)
-          if (isAgentTerminal && sessionIdRef.current) {
+          if (isAgent && sessionIdRef.current) {
             lastStatusRef.current = 'idle'
             scheduleUpdate({ status: 'idle' })
           }
@@ -253,7 +268,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       })
       .catch((err) => {
         const errorMsg = `Failed to start terminal: ${err.message || err}`
-        addError(errorMsg)
+        addErrorRef.current(errorMsg)
         terminal.write(`\r\n\x1b[31mError: Failed to start terminal\x1b[0m\r\n`)
         terminal.write(`\x1b[33m${err.message || err}\x1b[0m\r\n`)
       })
@@ -289,14 +304,14 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       terminal.dispose()
       if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current)
       if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current)
-      if (isAgentTerminal && sessionIdRef.current && lastStatusRef.current === 'working') {
+      if (isAgent && sessionIdRef.current && lastStatusRef.current === 'working') {
         updateAgentMonitorRef.current(sessionIdRef.current, { status: 'idle' })
       }
-      if (isAgentTerminal && sessionId) {
+      if (isAgent && sessionId) {
         terminalBufferRegistry.unregister(sessionId)
       }
     }
-  }, [sessionId, cwd, command, env, isAgentTerminal, addError])
+  }, [sessionId]) // Only recreate terminal when session identity changes
 
   // Fit when terminal becomes visible (e.g., tab switch)
   useEffect(() => {
