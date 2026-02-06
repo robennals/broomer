@@ -740,7 +740,6 @@ ipcMain.handle('fs:appendFile', async (_event, filePath: string, content: string
   }
 
   try {
-    const { appendFileSync } = await import('fs')
     appendFileSync(filePath, content, 'utf-8')
     return { success: true }
   } catch (error) {
