@@ -90,10 +90,10 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
   const [pushResult, setPushResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Agent writes to .broomer-review/ in repo; we move results to /tmp
-  const repoReviewDir = `${session.directory}/.broomer-review`
+  // Agent writes to .broomy-review/ in repo; we move results to /tmp
+  const repoReviewDir = `${session.directory}/.broomy-review`
   const repoReviewFilePath = `${repoReviewDir}/review.json`
-  const tmpDir = `/tmp/broomer-review-${session.id}`
+  const tmpDir = `/tmp/broomy-review-${session.id}`
   const tmpReviewFilePath = `${tmpDir}/review.json`
   const commentsFilePath = `${tmpDir}/comments.json`
 
@@ -164,7 +164,7 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
     setError(null)
 
     try {
-      // Create .broomer-review/ in repo for agent to write to
+      // Create .broomy-review/ in repo for agent to write to
       await window.fs.mkdir(repoReviewDir)
 
       // Ensure tmp dir exists for comments
@@ -178,7 +178,7 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
       await window.fs.writeFile(`${repoReviewDir}/prompt.md`, prompt)
 
       // Send command to agent terminal (user must press enter to confirm)
-      await window.pty.write(session.agentPtyId, 'Please read and follow the instructions in .broomer-review/prompt.md')
+      await window.pty.write(session.agentPtyId, 'Please read and follow the instructions in .broomy-review/prompt.md')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setGenerating(false)
@@ -518,11 +518,11 @@ You are reviewing a pull request. Analyze the diff and produce a structured revi
 
 1. Run \`git diff ${baseBranch}...HEAD\` to see the full diff
 2. Examine the changed files to understand the context
-3. Produce a structured JSON review and write it to \`.broomer-review/review.json\`
+3. Produce a structured JSON review and write it to \`.broomy-review/review.json\`
 
 ## Output Format
 
-Write the following JSON to \`.broomer-review/review.json\`:
+Write the following JSON to \`.broomy-review/review.json\`:
 
 \`\`\`json
 ${schema}
@@ -552,7 +552,7 @@ ${reviewInstructions}
   prompt += `
 ## Action
 
-Please analyze the PR now and write the result to \`.broomer-review/review.json\`.
+Please analyze the PR now and write the result to \`.broomy-review/review.json\`.
 `
 
   return prompt
