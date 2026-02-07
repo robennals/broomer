@@ -43,6 +43,7 @@ function createWindow(profileId?: string): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
     },
+    acceptFirstMouse: true,
   })
 
   // Track the first window as mainWindow for backwards compat
