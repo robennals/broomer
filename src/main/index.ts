@@ -1453,17 +1453,14 @@ ipcMain.handle('gh:mergeBranchToMain', async (_event, repoDir: string) => {
       }
     }
 
-    // Push current branch changes to remote first (if there are any)
+    // Push current branch to remote first (if there are any unpushed changes)
     await git.push()
 
-    // Checkout main, pull latest, fast-forward merge the branch, and push
-    await git.checkout(defaultBranch)
-    await git.pull()
-    await git.merge([currentBranch, '--ff-only'])
-    await git.push()
-
-    // Switch back to the original branch
-    await git.checkout(currentBranch)
+    // Push current HEAD directly to the remote default branch.
+    // This avoids checking out main locally, which fails in worktrees
+    // where main is already checked out in another worktree.
+    // Regular push already enforces fast-forward (rejects non-ff pushes).
+    await git.push('origin', `HEAD:${defaultBranch}`)
 
     return { success: true }
   } catch (error) {
