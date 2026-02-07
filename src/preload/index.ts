@@ -263,6 +263,10 @@ export type ProfilesApi = {
   getOpenProfiles: () => Promise<string[]>
 }
 
+export type AgentsApi = {
+  isInstalled: (command: string) => Promise<boolean>
+}
+
 const ptyApi: PtyApi = {
   create: (options) => ipcRenderer.invoke('pty:create', options),
   write: (id, data) => ipcRenderer.invoke('pty:write', id, data),
@@ -368,6 +372,10 @@ const profilesApi: ProfilesApi = {
   getOpenProfiles: () => ipcRenderer.invoke('profiles:getOpenProfiles'),
 }
 
+const agentsApi: AgentsApi = {
+  isInstalled: (command) => ipcRenderer.invoke('agent:isInstalled', command),
+}
+
 export type AppApi = {
   isDev: () => Promise<boolean>
   homedir: () => Promise<string>
@@ -422,6 +430,7 @@ contextBridge.exposeInMainWorld('gh', ghApi)
 contextBridge.exposeInMainWorld('repos', reposApi)
 contextBridge.exposeInMainWorld('shell', shellApi)
 contextBridge.exposeInMainWorld('profiles', profilesApi)
+contextBridge.exposeInMainWorld('agents', agentsApi)
 contextBridge.exposeInMainWorld('ts', tsApi)
 
 declare global {
@@ -438,6 +447,7 @@ declare global {
     repos: ReposApi
     shell: ShellApi
     profiles: ProfilesApi
+    agents: AgentsApi
     ts: TsApi
   }
 }

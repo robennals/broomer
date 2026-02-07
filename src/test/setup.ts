@@ -82,6 +82,11 @@ const mockTs = {
   }),
 }
 
+// Mock window.agents
+const mockAgents = {
+  isInstalled: vi.fn().mockResolvedValue(true),
+}
+
 // Mock window.menu
 const mockMenu = {
   popup: vi.fn().mockResolvedValue(null),
@@ -127,6 +132,7 @@ Object.defineProperty(globalThis, 'window', {
     gh: mockGh,
     shell: mockShell,
     repos: mockRepos,
+    agents: mockAgents,
     menu: mockMenu,
     ts: mockTs,
     fs: mockFs,
