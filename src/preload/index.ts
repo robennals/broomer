@@ -380,6 +380,20 @@ export type MenuApi = {
   popup: (items: MenuItemDef[]) => Promise<string | null>
 }
 
+export type TsProjectContext = {
+  projectRoot: string
+  compilerOptions: Record<string, unknown>
+  files: { path: string; content: string }[]
+}
+
+export type TsApi = {
+  getProjectContext: (projectRoot: string) => Promise<TsProjectContext>
+}
+
+const tsApi: TsApi = {
+  getProjectContext: (projectRoot) => ipcRenderer.invoke('ts:getProjectContext', projectRoot),
+}
+
 const appApi: AppApi = {
   isDev: () => ipcRenderer.invoke('app:isDev'),
   homedir: () => ipcRenderer.invoke('app:homedir'),
@@ -402,6 +416,7 @@ contextBridge.exposeInMainWorld('gh', ghApi)
 contextBridge.exposeInMainWorld('repos', reposApi)
 contextBridge.exposeInMainWorld('shell', shellApi)
 contextBridge.exposeInMainWorld('profiles', profilesApi)
+contextBridge.exposeInMainWorld('ts', tsApi)
 
 declare global {
   interface Window {
@@ -417,5 +432,6 @@ declare global {
     repos: ReposApi
     shell: ShellApi
     profiles: ProfilesApi
+    ts: TsApi
   }
 }
