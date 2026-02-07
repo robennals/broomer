@@ -995,7 +995,7 @@ export default function Explorer({
           title="Click to view full error"
           onClick={async () => {
             const errorContent = `${gitOpError.operation} failed\n${'='.repeat(40)}\n\n${gitOpError.message}`
-            const errorPath = '/tmp/broomer-git-error.txt'
+            const errorPath = '/tmp/broomy-git-error.txt'
             await window.fs.writeFile(errorPath, errorContent)
             onFileSelect?.(errorPath, false)
           }}
