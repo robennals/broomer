@@ -19,6 +19,7 @@ import { useErrorStore } from './store/errors'
 import { PanelProvider, PANEL_IDS } from './panels'
 import { terminalBufferRegistry } from './utils/terminalBufferRegistry'
 import { computeBranchStatus } from './utils/branchStatus'
+import { loadMonacoProjectContext } from './utils/monacoProjectContext'
 
 // Re-export types for backwards compatibility
 export type { Session, SessionStatus }
@@ -242,6 +243,13 @@ function AppContent() {
     const profileLabel = currentProfile && profiles.length > 1 ? ` [${currentProfile.name}]` : ''
     document.title = activeSession ? `${activeSession.name}${profileLabel} — Broomy` : `Broomy${profileLabel}`
   }, [activeSession?.name, activeSession?.id, currentProfile?.name, profiles.length])
+
+  // Load TypeScript project context when active session changes
+  useEffect(() => {
+    if (activeSession?.directory) {
+      loadMonacoProjectContext(activeSession.directory)
+    }
+  }, [activeSession?.directory])
 
   // Mark session as read when it becomes active, and focus agent terminal
   useEffect(() => {

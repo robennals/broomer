@@ -38,6 +38,8 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const cwdRef = useRef(cwd)
   cwdRef.current = cwd
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const wasAtBottomRef = useRef(true)
+  const userScrollTimestampRef = useRef(0)
   const { addError } = useErrorStore()
   const addErrorRef = useRef(addError)
   addErrorRef.current = addError
@@ -157,11 +159,40 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       return buffer.viewportY >= buffer.baseY - 3
     }
 
-    // Update "Go to End" button after every render — catches fit()-induced
-    // displacement, data writes, and user scrolls. No scroll enforcement.
+    // Detect spurious scroll jumps: if we were at bottom and suddenly aren't,
+    // and the user didn't scroll via mouse/touchpad recently, snap back.
     terminal.onRender(() => {
-      setShowScrollButton(!isAtBottom() && terminal.buffer.active.baseY > 0)
+      const atBottom = isAtBottom()
+      const buffer = terminal.buffer.active
+      const userScrolledRecently = Date.now() - userScrollTimestampRef.current < 500
+      const jumpDistance = buffer.baseY - buffer.viewportY
+
+      if (wasAtBottomRef.current && !atBottom && !userScrolledRecently && jumpDistance > 5) {
+        // Spurious jump detected — reset to bottom
+        terminal.scrollToBottom()
+        wasAtBottomRef.current = true
+        setShowScrollButton(false)
+        return
+      }
+
+      wasAtBottomRef.current = atBottom
+      setShowScrollButton(!atBottom && buffer.baseY > 0)
     })
+
+    // Track user-initiated scrolls so we don't fight intentional scroll-up
+    const handleUserScroll = () => {
+      userScrollTimestampRef.current = Date.now()
+    }
+    const handleKeyScroll = (e: KeyboardEvent) => {
+      if (e.key === 'PageUp' || e.key === 'PageDown' ||
+          (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) {
+        userScrollTimestampRef.current = Date.now()
+      }
+    }
+    containerRef.current.addEventListener('wheel', handleUserScroll, { passive: true })
+    containerRef.current.addEventListener('touchmove', handleUserScroll, { passive: true })
+    containerRef.current.addEventListener('keydown', handleKeyScroll)
+    const scrollContainer = containerRef.current
 
     // Initial fit
     requestAnimationFrame(() => {
@@ -322,6 +353,9 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     resizeObserver.observe(containerEl)
 
     return () => {
+      scrollContainer.removeEventListener('wheel', handleUserScroll)
+      scrollContainer.removeEventListener('touchmove', handleUserScroll)
+      scrollContainer.removeEventListener('keydown', handleKeyScroll)
       resizeObserver.disconnect()
       if (ptyResizeTimeout) clearTimeout(ptyResizeTimeout)
       cleanupRef.current?.()
