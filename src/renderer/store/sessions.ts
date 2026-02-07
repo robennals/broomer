@@ -57,6 +57,7 @@ export interface Session {
   showFileViewer: boolean
   showDiff: boolean
   selectedFilePath: string | null
+  planFilePath: string | null
   fileViewerPosition: FileViewerPosition
   layoutSizes: LayoutSizes
   explorerFilter: ExplorerFilter
@@ -79,6 +80,8 @@ export interface Session {
   lastKnownPrState?: PrState
   lastKnownPrNumber?: number
   lastKnownPrUrl?: string
+  // Archive state (persisted)
+  isArchived: boolean
 }
 
 // Default layout sizes
@@ -145,6 +148,7 @@ interface SessionStore {
   toggleUserTerminal: (id: string) => void
   toggleExplorer: (id: string) => void
   toggleFileViewer: (id: string) => void
+  setPlanFile: (id: string, path: string | null) => void
   selectFile: (id: string, filePath: string, openInDiffMode?: boolean) => void
   setFileViewerPosition: (id: string, position: FileViewerPosition) => void
   updateLayoutSize: (id: string, key: keyof LayoutSizes, value: number) => void
@@ -168,6 +172,9 @@ interface SessionStore {
   // Branch status actions
   updateBranchStatus: (sessionId: string, status: BranchStatus) => void
   updatePrState: (sessionId: string, prState: PrState, prNumber?: number, prUrl?: string) => void
+  // Archive actions
+  archiveSession: (sessionId: string) => void
+  unarchiveSession: (sessionId: string) => void
 }
 
 const generateId = () => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -254,6 +261,8 @@ const debouncedSave = async (
         lastKnownPrState: s.lastKnownPrState,
         lastKnownPrNumber: s.lastKnownPrNumber,
         lastKnownPrUrl: s.lastKnownPrUrl,
+        // Archive state
+        isArchived: s.isArchived || undefined,
       })),
       // Global state
       showSidebar: globalPanelVisibility[PANEL_IDS.SIDEBAR] ?? true,
@@ -309,8 +318,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           showFileViewer: panelVisibility[PANEL_IDS.FILE_VIEWER] ?? false,
           showDiff: sessionData.showDiff ?? false,
           selectedFilePath: null,
+          planFilePath: null,
           fileViewerPosition: sessionData.fileViewerPosition ?? 'top',
-          layoutSizes: sessionData.layoutSizes ?? { ...DEFAULT_LAYOUT_SIZES },
+          layoutSizes: { ...DEFAULT_LAYOUT_SIZES, ...(sessionData.layoutSizes ?? {}) },
           explorerFilter: sessionData.explorerFilter === 'all' ? 'files'
             : sessionData.explorerFilter === 'changed' ? 'source-control'
             : sessionData.explorerFilter ?? 'files',
@@ -330,6 +340,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           lastKnownPrState: sessionData.lastKnownPrState,
           lastKnownPrNumber: sessionData.lastKnownPrNumber,
           lastKnownPrUrl: sessionData.lastKnownPrUrl,
+          isArchived: sessionData.isArchived ?? false,
         }
         sessions.push(session)
       }
@@ -341,7 +352,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
       set({
         sessions,
-        activeSessionId: sessions.length > 0 ? sessions[0].id : null,
+        activeSessionId: (sessions.find((s) => !s.isArchived) ?? sessions[0])?.id ?? null,
         isLoading: false,
         showSidebar: config.showSidebar ?? true,
         sidebarWidth: config.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
@@ -383,6 +394,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       showFileViewer: false,
       showDiff: false,
       selectedFilePath: null,
+      planFilePath: null,
       fileViewerPosition: 'top',
       layoutSizes: { ...DEFAULT_LAYOUT_SIZES },
       explorerFilter: 'files',
@@ -396,6 +408,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       terminalTabs: createDefaultTerminalTabs(),
       // Branch status
       branchStatus: 'in-progress',
+      // Archive state
+      isArchived: false,
     }
 
     const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
@@ -543,6 +557,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   toggleFileViewer: (id: string) => {
     get().togglePanel(id, PANEL_IDS.FILE_VIEWER)
+  },
+
+  setPlanFile: (id: string, path: string | null) => {
+    const { sessions } = get()
+    const updatedSessions = sessions.map((s) =>
+      s.id === id ? { ...s, planFilePath: path } : s
+    )
+    set({ sessions: updatedSessions })
+    // planFilePath is runtime-only state, no need to persist
   },
 
   selectFile: (id: string, filePath: string) => {
@@ -819,6 +842,30 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
             lastKnownPrUrl: prUrl ?? s.lastKnownPrUrl,
           }
         : s
+    )
+    set({ sessions: updatedSessions })
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
+  },
+
+  archiveSession: (sessionId: string) => {
+    const { sessions, activeSessionId, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const updatedSessions = sessions.map((s) =>
+      s.id === sessionId ? { ...s, isArchived: true } : s
+    )
+    // If archiving the active session, switch to the next non-archived session
+    let newActiveId = activeSessionId
+    if (activeSessionId === sessionId) {
+      const nextActive = updatedSessions.find((s) => !s.isArchived)
+      newActiveId = nextActive?.id ?? null
+    }
+    set({ sessions: updatedSessions, activeSessionId: newActiveId })
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
+  },
+
+  unarchiveSession: (sessionId: string) => {
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const updatedSessions = sessions.map((s) =>
+      s.id === sessionId ? { ...s, isArchived: false } : s
     )
     set({ sessions: updatedSessions })
     debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
