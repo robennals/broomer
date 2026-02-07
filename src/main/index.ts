@@ -1,11 +1,15 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import { join } from 'path'
-import { homedir } from 'os'
+import { homedir, tmpdir } from 'os'
 import { statusFromChar, buildPrCreateUrl } from './gitStatusParser'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, chmodSync, copyFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, copyFileSync, rmSync } from 'fs'
 import * as pty from 'node-pty'
 import simpleGit from 'simple-git'
 import { exec, execSync } from 'child_process'
+import { isWindows, isMac, getDefaultShell, getExecShell, normalizePath, makeExecutable } from './platform'
+
+// Ensure app name is correct (in dev mode Electron defaults to "Electron")
+app.name = 'Broomy'
 
 // Check if we're in development mode
 const isDev = process.env.ELECTRON_RENDERER_URL !== undefined
@@ -29,13 +33,18 @@ let mainWindow: BrowserWindow | null = null
 
 function createWindow(profileId?: string): BrowserWindow {
   const window = new BrowserWindow({
+    title: 'Broomy',
     width: 1400,
     height: 900,
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#1a1a1a',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 10 },
+    ...(isMac ? {
+      titleBarStyle: 'hiddenInset' as const,
+      trafficLightPosition: { x: 15, y: 10 },
+    } : {
+      titleBarStyle: 'hidden' as const,
+    }),
     // Hide window in E2E test mode for headless-like behavior (unless E2E_HEADLESS=false)
     show: !(isE2ETest && isHeadless),
     webPreferences: {
@@ -120,23 +129,35 @@ ipcMain.handle('pty:create', (_event, options: { id: string; cwd: string; comman
 
   if (isE2ETest) {
     // In E2E mode, use controlled shells
-    shell = '/bin/bash'
-    shellArgs = []
+    if (isWindows) {
+      shell = process.env.ComSpec || 'cmd.exe'
+      shellArgs = []
 
-    if (options.command) {
-      // This is an agent terminal - run the fake claude script
-      const fakeClaude = join(__dirname, '../../scripts/fake-claude.sh')
-      initialCommand = `bash "${fakeClaude}"`
+      if (options.command) {
+        const fakeClaude = join(__dirname, '../../scripts/fake-claude.ps1')
+        initialCommand = `powershell -ExecutionPolicy Bypass -File "${fakeClaude}"`
+      } else {
+        initialCommand = 'echo E2E_TEST_SHELL_READY'
+      }
     } else {
-      // Regular user terminal - just echo ready marker
-      initialCommand = 'echo "E2E_TEST_SHELL_READY"; PS1="test-shell$ "'
+      shell = '/bin/bash'
+      shellArgs = []
+
+      if (options.command) {
+        // This is an agent terminal - run the fake claude script
+        const fakeClaude = join(__dirname, '../../scripts/fake-claude.sh')
+        initialCommand = `bash "${fakeClaude}"`
+      } else {
+        // Regular user terminal - just echo ready marker
+        initialCommand = 'echo "E2E_TEST_SHELL_READY"; PS1="test-shell$ "'
+      }
     }
   } else if (E2E_MOCK_SHELL) {
     // Run the mock shell script via bash (external script mode)
-    shell = '/bin/bash'
-    shellArgs = [E2E_MOCK_SHELL]
+    shell = isWindows ? (process.env.ComSpec || 'cmd.exe') : '/bin/bash'
+    shellArgs = isWindows ? ['/c', E2E_MOCK_SHELL] : [E2E_MOCK_SHELL]
   } else {
-    shell = process.env.SHELL || '/bin/zsh'
+    shell = getDefaultShell()
     shellArgs = []
   }
 
@@ -309,9 +330,9 @@ migrateToProfiles()
 
 // Demo sessions for E2E tests (each needs a unique directory for branch tracking)
 const E2E_DEMO_SESSIONS = [
-  { id: '1', name: 'broomy', directory: '/tmp/e2e-broomy', agentId: 'claude' },
-  { id: '2', name: 'backend-api', directory: '/tmp/e2e-backend-api', agentId: 'aider' },
-  { id: '3', name: 'docs-site', directory: '/tmp/e2e-docs-site', agentId: null },
+  { id: '1', name: 'broomy', directory: normalizePath(join(tmpdir(), 'broomy-e2e-broomy')), agentId: 'claude' },
+  { id: '2', name: 'backend-api', directory: normalizePath(join(tmpdir(), 'broomy-e2e-backend-api')), agentId: 'aider' },
+  { id: '3', name: 'docs-site', directory: normalizePath(join(tmpdir(), 'broomy-e2e-docs-site')), agentId: null },
 ]
 
 // Create E2E test directories if in E2E mode
@@ -325,7 +346,7 @@ if (isE2ETest) {
 
 // Demo repos for E2E tests
 const E2E_DEMO_REPOS = [
-  { id: 'repo-1', name: 'demo-project', remoteUrl: 'git@github.com:user/demo-project.git', rootDir: '/tmp/e2e-repos/demo-project', defaultBranch: 'main' },
+  { id: 'repo-1', name: 'demo-project', remoteUrl: 'git@github.com:user/demo-project.git', rootDir: normalizePath(join(tmpdir(), 'broomy-e2e-repos/demo-project')), defaultBranch: 'main' },
 ]
 
 // Profiles IPC handlers
@@ -345,7 +366,7 @@ ipcMain.handle('profiles:list', async () => {
   }
 })
 
-ipcMain.handle('profiles:save', async (_event, data: { profiles: Array<{ id: string; name: string; color: string }>; lastProfileId: string }) => {
+ipcMain.handle('profiles:save', async (_event, data: { profiles: { id: string; name: string; color: string }[]; lastProfileId: string }) => {
   if (isE2ETest) {
     return { success: true }
   }
@@ -385,7 +406,7 @@ ipcMain.handle('profiles:getOpenProfiles', async () => {
 ipcMain.handle('config:load', async (_event, profileId?: string) => {
   // In E2E test mode, return demo sessions for consistent testing
   if (isE2ETest) {
-    return { agents: DEFAULT_AGENTS, sessions: E2E_DEMO_SESSIONS, repos: E2E_DEMO_REPOS, defaultCloneDir: '/tmp/e2e-repos' }
+    return { agents: DEFAULT_AGENTS, sessions: E2E_DEMO_SESSIONS, repos: E2E_DEMO_REPOS, defaultCloneDir: normalizePath(join(tmpdir(), 'broomy-e2e-repos')) }
   }
 
   const configFile = profileId ? getProfileConfigFile(profileId) : LEGACY_CONFIG_FILE
@@ -427,7 +448,7 @@ ipcMain.handle('config:save', async (_event, config: { profileId?: string; agent
         // ignore
       }
     }
-    const configToSave = {
+    const configToSave: Record<string, unknown> = {
       ...existingConfig,
       agents: config.agents || DEFAULT_AGENTS,
       sessions: config.sessions,
@@ -447,9 +468,9 @@ ipcMain.handle('config:save', async (_event, config: { profileId?: string; agent
 
 // Mock branch data for E2E tests (keyed by directory)
 const E2E_MOCK_BRANCHES: Record<string, string> = {
-  '/tmp/e2e-broomy': 'main',
-  '/tmp/e2e-backend-api': 'feature/auth',
-  '/tmp/e2e-docs-site': 'main',
+  [normalizePath(join(tmpdir(), 'broomy-e2e-broomy'))]: 'main',
+  [normalizePath(join(tmpdir(), 'broomy-e2e-backend-api'))]: 'feature/auth',
+  [normalizePath(join(tmpdir(), 'broomy-e2e-docs-site'))]: 'main',
 }
 
 // Git IPC handlers
@@ -647,7 +668,7 @@ ipcMain.handle('git:diff', async (_event, repoPath: string, filePath?: string) =
   }
 })
 
-ipcMain.handle('git:show', async (_event, repoPath: string, filePath: string, ref: string = 'HEAD') => {
+ipcMain.handle('git:show', async (_event, repoPath: string, filePath: string, ref = 'HEAD') => {
   // In E2E test mode, return mock original content
   if (isE2ETest) {
     return `export function main() {
@@ -684,7 +705,7 @@ ipcMain.handle('fs:readDir', async (_event, dirPath: string) => {
       .filter((entry) => entry.name !== '.git') // Only hide .git directory
       .map((entry) => ({
         name: entry.name,
-        path: join(dirPath, entry.name),
+        path: normalizePath(join(dirPath, entry.name)),
         isDirectory: entry.isDirectory(),
       }))
       .sort((a, b) => {
@@ -704,22 +725,18 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
     return '// Mock file content for E2E tests\nexport const test = true;\n'
   }
 
-  try {
-    if (!existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`)
-    }
-    const stats = statSync(filePath)
-    if (stats.isDirectory()) {
-      throw new Error('Cannot read directory as file')
-    }
-    // Check if file is too large (over 5MB)
-    if (stats.size > 5 * 1024 * 1024) {
-      throw new Error('File is too large to display')
-    }
-    return readFileSync(filePath, 'utf-8')
-  } catch (error) {
-    throw error // Re-throw to send error to renderer
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`)
   }
+  const stats = statSync(filePath)
+  if (stats.isDirectory()) {
+    throw new Error('Cannot read directory as file')
+  }
+  // Check if file is too large (over 5MB)
+  if (stats.size > 5 * 1024 * 1024) {
+    throw new Error('File is too large to display')
+  }
+  return readFileSync(filePath, 'utf-8')
 })
 
 ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
@@ -834,7 +851,9 @@ ipcMain.handle('fs:search', async (_event, dirPath: string, query: string) => {
       }
 
       const filePath = join(dir, entry.name)
-      const relativePath = filePath.replace(dirPath + '/', '')
+      const normalizedFilePath = normalizePath(filePath)
+      const normalizedDirPath = normalizePath(dirPath)
+      const relativePath = normalizedFilePath.replace(normalizedDirPath + '/', '')
       const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase()
 
       // Check filename match
@@ -861,7 +880,7 @@ ipcMain.handle('fs:search', async (_event, dirPath: string, query: string) => {
 
       if (filenameMatch || contentMatches.length > 0) {
         results.push({
-          path: filePath,
+          path: normalizedFilePath,
           name: entry.name,
           relativePath,
           matchType: filenameMatch ? 'filename' : 'content',
@@ -881,27 +900,24 @@ ipcMain.handle('fs:readFileBase64', async (_event, filePath: string) => {
     return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
   }
 
-  try {
-    if (!existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`)
-    }
-    const stats = statSync(filePath)
-    if (stats.isDirectory()) {
-      throw new Error('Cannot read directory as file')
-    }
-    // Check if file is too large (over 10MB for images)
-    if (stats.size > 10 * 1024 * 1024) {
-      throw new Error('File is too large to display')
-    }
-    return readFileSync(filePath).toString('base64')
-  } catch (error) {
-    throw error
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`)
   }
+  const stats = statSync(filePath)
+  if (stats.isDirectory()) {
+    throw new Error('Cannot read directory as file')
+  }
+  // Check if file is too large (over 10MB for images)
+  if (stats.size > 10 * 1024 * 1024) {
+    throw new Error('File is too large to display')
+  }
+  return readFileSync(filePath).toString('base64')
 })
 
 // App info IPC handlers
 ipcMain.handle('app:isDev', () => isDev)
 ipcMain.handle('app:homedir', () => homedir())
+ipcMain.handle('app:platform', () => process.platform)
 
 // Expand ~ to home directory
 const expandHomePath = (path: string) => {
@@ -958,7 +974,7 @@ ipcMain.handle('git:worktreeList', async (_event, repoPath: string) => {
     for (const line of raw.split('\n')) {
       if (line.startsWith('worktree ')) {
         if (current.path) worktrees.push(current)
-        current = { path: line.slice(9), branch: '', head: '' }
+        current = { path: normalizePath(line.slice(9)), branch: '', head: '' }
       } else if (line.startsWith('HEAD ')) {
         current.head = line.slice(5)
       } else if (line.startsWith('branch ')) {
@@ -1324,7 +1340,7 @@ ipcMain.handle('gh:issues', async (_event, repoDir: string) => {
       timeout: 30000,
     })
     const issues = JSON.parse(result)
-    return issues.map((issue: { number: number; title: string; labels: Array<{ name: string }>; url: string }) => ({
+    return issues.map((issue: { number: number; title: string; labels: { name: string }[]; url: string }) => ({
       number: issue.number,
       title: issue.title,
       labels: (issue.labels || []).map((l: { name: string }) => l.name),
@@ -1370,10 +1386,11 @@ ipcMain.handle('gh:prStatus', async (_event, repoDir: string) => {
   }
 
   try {
-    const result = execSync('gh pr view --json number,title,state,url,headRefName,baseRefName 2>/dev/null', {
+    const result = execSync('gh pr view --json number,title,state,url,headRefName,baseRefName', {
       cwd: expandHomePath(repoDir),
       encoding: 'utf-8',
       timeout: 15000,
+      stdio: ['pipe', 'pipe', 'ignore'],
     })
     const pr = JSON.parse(result)
     return {
@@ -1440,17 +1457,14 @@ ipcMain.handle('gh:mergeBranchToMain', async (_event, repoDir: string) => {
       }
     }
 
-    // Push current branch changes to remote first (if there are any)
+    // Push current branch to remote first (if there are any unpushed changes)
     await git.push()
 
-    // Checkout main, pull latest, fast-forward merge the branch, and push
-    await git.checkout(defaultBranch)
-    await git.pull()
-    await git.merge([currentBranch, '--ff-only'])
-    await git.push()
-
-    // Switch back to the original branch
-    await git.checkout(currentBranch)
+    // Push current HEAD directly to the remote default branch.
+    // This avoids checking out main locally, which fails in worktrees
+    // where main is already checked out in another worktree.
+    // Regular push already enforces fast-forward (rejects non-ff pushes).
+    await git.push('origin', `HEAD:${defaultBranch}`)
 
     return { success: true }
   } catch (error) {
@@ -1593,7 +1607,7 @@ ipcMain.handle('gh:prsToReview', async (_event, repoDir: string) => {
       timeout: 30000,
     })
     const prs = JSON.parse(result)
-    return prs.map((pr: { number: number; title: string; author: { login: string }; url: string; headRefName: string; baseRefName: string; labels: Array<{ name: string }> }) => ({
+    return prs.map((pr: { number: number; title: string; author: { login: string }; url: string; headRefName: string; baseRefName: string; labels: { name: string }[] }) => ({
       number: pr.number,
       title: pr.title,
       author: pr.author?.login || 'unknown',
@@ -1614,12 +1628,6 @@ ipcMain.handle('gh:submitDraftReview', async (_event, repoDir: string, prNumber:
   }
 
   try {
-    const commentsJson = JSON.stringify(comments.map(c => ({
-      path: c.path,
-      line: c.line,
-      body: c.body,
-    })))
-
     const result = execSync(
       `gh api repos/{owner}/{repo}/pulls/${prNumber}/reviews -X POST -f event=PENDING -f body="" --input -`,
       {
@@ -1639,7 +1647,9 @@ ipcMain.handle('gh:submitDraftReview', async (_event, repoDir: string, prNumber:
 // Init script handlers - profile-aware
 ipcMain.handle('repos:getInitScript', async (_event, repoId: string, profileId?: string) => {
   if (isE2ETest) {
-    return '#!/bin/bash\necho "init script for E2E"'
+    return isWindows
+      ? '@echo off\r\necho init script for E2E'
+      : '#!/bin/bash\necho "init script for E2E"'
   }
 
   try {
@@ -1664,7 +1674,7 @@ ipcMain.handle('repos:saveInitScript', async (_event, repoId: string, script: st
     }
     const scriptPath = join(initScriptsDir, `${repoId}.sh`)
     writeFileSync(scriptPath, script, 'utf-8')
-    chmodSync(scriptPath, 0o755)
+    makeExecutable(scriptPath)
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
@@ -1678,7 +1688,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, cwd: string) => {
   }
 
   return new Promise<{ success: boolean; stdout: string; stderr: string; exitCode: number }>((resolve) => {
-    exec(command, { cwd: expandHomePath(cwd), shell: '/bin/bash', timeout: 300000 }, (error, stdout, stderr) => {
+    exec(command, { cwd: expandHomePath(cwd), shell: getExecShell(), timeout: 300000 }, (error, stdout, stderr) => {
       const exitCode = error ? (error as NodeJS.ErrnoException & { code?: number }).code || 1 : 0
       resolve({
         success: !error,
@@ -1705,7 +1715,7 @@ ipcMain.handle('dialog:openFolder', async (_event) => {
   if (result.canceled || result.filePaths.length === 0) {
     return null
   }
-  return result.filePaths[0]
+  return normalizePath(result.filePaths[0])
 })
 
 // Track which window owns each file watcher
@@ -1766,7 +1776,7 @@ ipcMain.handle('fs:unwatch', async (_event, id: string) => {
 })
 
 // Native context menu IPC handler
-ipcMain.handle('menu:popup', async (_event, items: Array<{ id: string; label: string; enabled?: boolean; type?: 'separator' }>) => {
+ipcMain.handle('menu:popup', async (_event, items: { id: string; label: string; enabled?: boolean; type?: 'separator' }[]) => {
   const senderWindow = BrowserWindow.fromWebContents(_event.sender) || mainWindow
   return new Promise<string | null>((resolve) => {
     const template = items.map((item) => {

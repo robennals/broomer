@@ -225,6 +225,10 @@ export type SessionData = {
   lastKnownPrState?: 'OPEN' | 'MERGED' | 'CLOSED' | null
   lastKnownPrNumber?: number
   lastKnownPrUrl?: string
+  // Commit tracking
+  hasHadCommits?: boolean
+  // Archive state
+  isArchived?: boolean
 }
 
 export type ConfigData = {
@@ -369,6 +373,7 @@ const profilesApi: ProfilesApi = {
 export type AppApi = {
   isDev: () => Promise<boolean>
   homedir: () => Promise<string>
+  platform: () => Promise<string>
 }
 
 export type MenuItemDef = {
@@ -399,6 +404,7 @@ const tsApi: TsApi = {
 const appApi: AppApi = {
   isDev: () => ipcRenderer.invoke('app:isDev'),
   homedir: () => ipcRenderer.invoke('app:homedir'),
+  platform: () => ipcRenderer.invoke('app:platform'),
 }
 
 const menuApi: MenuApi = {

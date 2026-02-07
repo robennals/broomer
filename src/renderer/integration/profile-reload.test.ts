@@ -38,7 +38,7 @@ describe('Profile reload integration', () => {
           agentId: 'a1',
         },
       ],
-      repos: [{ id: 'r1', name: 'my-repo', url: 'https://github.com/org/repo', directory: '/repos/my-repo' }],
+      repos: [{ id: 'r1', name: 'my-repo', remoteUrl: 'https://github.com/org/repo', rootDir: '/repos/my-repo', defaultBranch: 'main' }],
     })
     vi.mocked(window.git.getBranch).mockResolvedValue('main')
     vi.mocked(window.app.homedir).mockResolvedValue('/Users/test')
@@ -98,7 +98,7 @@ describe('Profile reload integration', () => {
       sessions: [
         { id: 's2', name: 'new-project', directory: '/repos/new', agentId: 'a2' },
       ],
-      repos: [{ id: 'r2', name: 'new-repo', url: 'https://github.com/org/new', directory: '/repos/new' }],
+      repos: [{ id: 'r2', name: 'new-repo', remoteUrl: 'https://github.com/org/new', rootDir: '/repos/new', defaultBranch: 'main' }],
     })
 
     await Promise.all([

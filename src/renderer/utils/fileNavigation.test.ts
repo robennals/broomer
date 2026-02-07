@@ -15,8 +15,10 @@ describe('resolveNavigation', () => {
   it('returns update-scroll when navigating to the same file', () => {
     const result = resolveNavigation(baseTarget, '/project/foo.ts', false)
     expect(result.action).toBe('update-scroll')
-    expect(result.state.scrollToLine).toBe(42)
-    expect(result.state.searchHighlight).toBe('search')
+    if (result.action === 'update-scroll') {
+      expect(result.state.scrollToLine).toBe(42)
+      expect(result.state.searchHighlight).toBe('search')
+    }
   })
 
   it('returns update-scroll for same file even when dirty', () => {

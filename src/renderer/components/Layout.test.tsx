@@ -4,7 +4,6 @@ import { render, screen, cleanup } from '@testing-library/react'
 import '../../test/react-setup'
 import Layout from './Layout'
 import { PanelProvider, PANEL_IDS, DEFAULT_TOOLBAR_PANELS } from '../panels'
-import React from 'react'
 
 afterEach(() => {
   cleanup()

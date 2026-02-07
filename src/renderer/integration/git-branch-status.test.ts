@@ -10,6 +10,7 @@ function makeInput(overrides: Partial<BranchStatusInput> = {}): BranchStatusInpu
     hasTrackingBranch: false,
     isOnMainBranch: false,
     isMergedToMain: false,
+    hasHadCommits: false,
     lastKnownPrState: undefined,
     ...overrides,
   }
@@ -61,7 +62,16 @@ describe('Git branch status integration', () => {
     expect(computeBranchStatus(makeInput({
       hasTrackingBranch: true,
       isMergedToMain: true,
+      hasHadCommits: true,
     }))).toBe('merged')
+  })
+
+  it('isMergedToMain without hasHadCommits does not report merged (fresh branch)', () => {
+    expect(computeBranchStatus(makeInput({
+      hasTrackingBranch: true,
+      isMergedToMain: true,
+      hasHadCommits: false,
+    }))).toBe('pushed')
   })
 
   it('no tracking branch, no changes → in-progress', () => {

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   evaluateActivity,
-  DEFAULT_CONFIG,
   type ActivityDetectorState,
   type ActivityDetectorConfig,
 } from './terminalActivityDetector'
