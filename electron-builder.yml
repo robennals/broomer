@@ -15,15 +15,26 @@ extraResources:
     filter:
       - '**/*'
 mac:
+  target:
+    - dmg
+    - zip
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     NSCameraUsageDescription: 'Camera access is not required for this application.'
     NSMicrophoneUsageDescription: 'Microphone access is not required for this application.'
   notarize: false
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
 linux:
   target:
     - AppImage
-    - snap
     - deb
   maintainer: electronjs.org
   category: Utility
