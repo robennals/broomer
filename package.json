@@ -1,7 +1,9 @@
 {
-  "name": "broomy",
+  "name": "Broomy",
   "version": "1.0.0",
   "description": "Multi-agent session manager for AI coding assistants",
+  "author": "Rob Ennals <rob.ennals@gmail.com>",
+  "homepage": "https://broomy.org",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
@@ -9,15 +11,19 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "pnpm build && electron-builder --mac && chmod +x dist/mac-arm64/Broomy.app/Contents/Resources/app/node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper",
+    "dist": "pnpm build && electron-builder --mac",
+    "dist:mac": "pnpm build && electron-builder --mac",
+    "dist:win": "pnpm build && electron-builder --win",
+    "dist:linux": "pnpm build && electron-builder --linux",
+    "dist:all": "pnpm build && electron-builder --mac --win --linux",
     "dist:dir": "pnpm build && electron-builder --mac --dir",
-    "start": "open dist/mac-arm64/Broomy.app",
+    "start": "electron .",
     "test": "playwright test",
     "test:headed": "E2E_HEADLESS=false playwright test",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:unit:coverage": "vitest run --coverage",
-    "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
+    "postinstall": "electron-builder install-app-deps && node scripts/postinstall.cjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

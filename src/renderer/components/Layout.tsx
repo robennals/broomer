@@ -373,7 +373,7 @@ export default function Layout({
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         <div
-          className="flex items-center gap-2 pl-16"
+          className={`flex items-center gap-2 ${isMac ? 'pl-16' : 'pl-2'}`}
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <span className="text-sm font-medium text-text-primary" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>{title || 'Broomy'}</span>
