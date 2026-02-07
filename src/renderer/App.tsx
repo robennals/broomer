@@ -539,7 +539,7 @@ function AppContent() {
         diffLabel={diffLabel}
         reviewContext={activeSession?.sessionType === 'review' ? {
           sessionDirectory: activeSession.directory,
-          commentsFilePath: `${activeSession.directory}/.broomer-review/comments.json`,
+          commentsFilePath: `/tmp/broomer-review-${activeSession.id}/comments.json`,
         } : undefined}
       />
     ) : null,
@@ -547,10 +547,8 @@ function AppContent() {
       <ReviewPanel
         session={activeSession}
         repo={repos.find(r => r.id === activeSession.repoId)}
-        onSelectFile={(filePath) => {
-          if (activeSessionId) {
-            selectFile(activeSessionId, filePath)
-          }
+        onSelectFile={(filePath, openInDiffMode, scrollToLine, diffBaseRef) => {
+          navigateToFile(filePath, openInDiffMode, scrollToLine, undefined, diffBaseRef)
         }}
       />
     ) : null,
@@ -575,6 +573,7 @@ function AppContent() {
     agentTerminalPanel,
     userTerminalPanel,
     handleToggleFileViewer,
+    navigateToFile,
     repos,
   ])
 

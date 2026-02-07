@@ -104,9 +104,18 @@ const createDefaultTerminalTabs = (): TerminalTabsState => {
 // Default panel visibility for new sessions
 const DEFAULT_PANEL_VISIBILITY: PanelVisibility = {
   [PANEL_IDS.AGENT_TERMINAL]: true,
+  [PANEL_IDS.USER_TERMINAL]: true,
+  [PANEL_IDS.EXPLORER]: true,
+  [PANEL_IDS.FILE_VIEWER]: false,
+}
+
+// Panel visibility for review sessions
+const REVIEW_PANEL_VISIBILITY: PanelVisibility = {
+  [PANEL_IDS.AGENT_TERMINAL]: true,
   [PANEL_IDS.USER_TERMINAL]: false,
   [PANEL_IDS.EXPLORER]: false,
   [PANEL_IDS.FILE_VIEWER]: false,
+  [PANEL_IDS.REVIEW]: true,
 }
 
 // Global panel visibility (sidebar, settings)
@@ -363,11 +372,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const name = extra?.name || basename(directory)
     const id = generateId()
 
-    const panelVisibility = { ...DEFAULT_PANEL_VISIBILITY }
-    // Auto-show review panel for review sessions
-    if (extra?.sessionType === 'review') {
-      panelVisibility[PANEL_IDS.REVIEW] = true
-    }
+    const isReview = extra?.sessionType === 'review'
+    const panelVisibility = isReview ? { ...REVIEW_PANEL_VISIBILITY } : { ...DEFAULT_PANEL_VISIBILITY }
     const newSession: Session = {
       id,
       name,
@@ -377,10 +383,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       agentId,
       ...extra,
       panelVisibility,
-      showAgentTerminal: true,
-      showUserTerminal: false,
-      showExplorer: false,
-      showFileViewer: false,
+      showAgentTerminal: panelVisibility[PANEL_IDS.AGENT_TERMINAL] ?? true,
+      showUserTerminal: panelVisibility[PANEL_IDS.USER_TERMINAL] ?? false,
+      showExplorer: panelVisibility[PANEL_IDS.EXPLORER] ?? false,
+      showFileViewer: panelVisibility[PANEL_IDS.FILE_VIEWER] ?? false,
       showDiff: false,
       selectedFilePath: null,
       fileViewerPosition: 'top',

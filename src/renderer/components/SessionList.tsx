@@ -180,11 +180,12 @@ export default function SessionList({
                 }`}>
                   {session.branch}
                 </span>
-                <BranchStatusChip status={session.branchStatus} />
-                {session.sessionType === 'review' && (
+                {session.sessionType === 'review' ? (
                   <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-purple-500/20 text-purple-400 flex-shrink-0">
                     Review
                   </span>
+                ) : (
+                  <BranchStatusChip status={session.branchStatus} />
                 )}
                 <button
                   onClick={(e) => handleDelete(e, session)}
