@@ -270,8 +270,9 @@ const LEGACY_CONFIG_FILE = join(CONFIG_DIR, CONFIG_FILE_NAME)
 
 // Default agents
 const DEFAULT_AGENTS = [
-  { id: 'claude', name: 'Claude Code', command: 'claude' },
-  { id: 'aider', name: 'Aider', command: 'aider' },
+  { id: 'claude', name: 'Claude Code', command: 'claude', color: '#D97757' },
+  { id: 'codex', name: 'Codex', command: 'codex', color: '#10A37F' },
+  { id: 'gemini', name: 'Gemini CLI', command: 'gemini', color: '#4285F4' },
 ]
 
 // Default profiles
@@ -419,6 +420,14 @@ ipcMain.handle('config:load', async (_event, profileId?: string) => {
     // Ensure agents array exists with defaults
     if (!config.agents || config.agents.length === 0) {
       config.agents = DEFAULT_AGENTS
+    } else {
+      // Merge in any new default agents that aren't already present
+      const existingIds = new Set(config.agents.map((a: { id: string }) => a.id))
+      for (const defaultAgent of DEFAULT_AGENTS) {
+        if (!existingIds.has(defaultAgent.id)) {
+          config.agents.push(defaultAgent)
+        }
+      }
     }
     return config
   } catch {
@@ -1308,6 +1317,17 @@ ipcMain.handle('git:commitFiles', async (_event, repoPath: string, commitHash: s
     return files
   } catch {
     return []
+  }
+})
+
+// Agent CLI installation check
+ipcMain.handle('agent:isInstalled', async (_event, command: string) => {
+  if (isE2ETest) return true
+  try {
+    execSync(isWindows ? `where ${command}` : `which ${command}`, { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
   }
 })
 

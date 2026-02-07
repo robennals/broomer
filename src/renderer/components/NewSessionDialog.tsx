@@ -1689,6 +1689,36 @@ function AgentPickerView({
 }) {
   const { agents } = useAgentStore()
   const folderName = repoName || directory.split('/').pop() || directory
+  const [installedStatus, setInstalledStatus] = useState<Record<string, boolean>>({})
+  const [warningAgentId, setWarningAgentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function checkInstalled() {
+      const status: Record<string, boolean> = {}
+      await Promise.all(
+        agents.map(async (agent) => {
+          try {
+            status[agent.id] = await window.agents.isInstalled(agent.command)
+          } catch {
+            status[agent.id] = false
+          }
+        })
+      )
+      if (!cancelled) setInstalledStatus(status)
+    }
+    checkInstalled()
+    return () => { cancelled = true }
+  }, [agents])
+
+  const handleAgentClick = (agentId: string) => {
+    const isInstalled = installedStatus[agentId] !== false
+    if (!isInstalled && warningAgentId !== agentId) {
+      setWarningAgentId(agentId)
+      return
+    }
+    onComplete(directory, agentId, repoId ? { repoId, name: repoName } : undefined)
+  }
 
   return (
     <>
@@ -1705,22 +1735,40 @@ function AgentPickerView({
       </div>
 
       <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
-        {agents.map((agent) => (
-          <button
-            key={agent.id}
-            onClick={() => onComplete(directory, agent.id, repoId ? { repoId, name: repoName } : undefined)}
-            className="w-full flex items-center gap-3 p-3 rounded border border-border bg-bg-primary hover:bg-bg-tertiary hover:border-accent transition-colors text-left"
-          >
-            <div
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: agent.color || '#4a9eff' }}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm text-text-primary">{agent.name}</div>
-              <div className="text-xs text-text-secondary font-mono truncate">{agent.command}</div>
+        {agents.map((agent) => {
+          const isInstalled = installedStatus[agent.id] !== false
+          const showWarning = warningAgentId === agent.id
+          return (
+            <div key={agent.id}>
+              <button
+                onClick={() => handleAgentClick(agent.id)}
+                className="w-full flex items-center gap-3 p-3 rounded border border-border bg-bg-primary hover:bg-bg-tertiary hover:border-accent transition-colors text-left"
+              >
+                <div
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: agent.color || '#4a9eff' }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm text-text-primary flex items-center gap-2">
+                    {agent.name}
+                    {!isInstalled && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
+                        not installed
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-text-secondary font-mono truncate">{agent.command}</div>
+                </div>
+              </button>
+              {showWarning && (
+                <div className="mt-1 ml-6 p-2 rounded bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-300">
+                  <span className="font-medium">{agent.command}</span> was not found on your PATH.
+                  Install it first, or click again to proceed anyway.
+                </div>
+              )}
             </div>
-          </button>
-        ))}
+          )
+        })}
 
         <button
           onClick={() => onComplete(directory, null, repoId ? { repoId, name: repoName } : undefined)}
