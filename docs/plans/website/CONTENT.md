@@ -170,7 +170,7 @@ or submit a pull request. Broomy is built in the open.
 
 With the repo URL prominently displayed below the button:
 ```
-github.com/robennals/broomer
+github.com/broomy-ai/broomy
 ```
 
 **Stats** (fetched at build time, displayed as small metrics):
@@ -202,7 +202,7 @@ Or build from source:
 ```
 
 ```bash
-git clone https://github.com/robennals/broomer.git
+git clone https://github.com/broomy-ai/broomy.git
 cd broomer/main
 pnpm install
 pnpm dev

@@ -1,4 +1,4 @@
-const RELEASE_URL = 'https://github.com/robennals/broomer/releases/latest'
+const RELEASE_URL = 'https://github.com/broomy-ai/broomy/releases/latest'
 
 export function DownloadButtons({ compact }: { compact?: boolean }) {
   if (compact) {

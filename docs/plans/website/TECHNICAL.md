@@ -200,7 +200,7 @@ export default function Home() {
 ### `DownloadButton.tsx`
 - Prominent white button with Apple logo icon
 - Text: "Download for macOS" with smaller "Apple Silicon · v1.0.0" subtitle
-- Links to GitHub Releases (e.g., `https://github.com/robennals/broomer/releases/latest`)
+- Links to GitHub Releases (e.g., `https://github.com/broomy-ai/broomy/releases/latest`)
 - Sticky/floating version also appears in the nav bar on scroll
 
 ### `FeatureSection.tsx`
@@ -260,7 +260,7 @@ Install Command: npm install   (website has its own package.json)
 
 ### Environment Variables (Vercel)
 ```
-NEXT_PUBLIC_GITHUB_REPO=robennals/broomer
+NEXT_PUBLIC_GITHUB_REPO=broomy-ai/broomy
 NEXT_PUBLIC_APP_VERSION=1.0.0
 ```
 

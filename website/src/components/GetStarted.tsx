@@ -1,8 +1,8 @@
 import DownloadButton from './DownloadButton'
 import CodeBlock from './CodeBlock'
 
-const buildFromSource = `git clone https://github.com/robennals/broomer.git
-cd broomer/main
+const buildFromSource = `git clone https://github.com/broomy-ai/broomy.git
+cd broomy
 pnpm install
 pnpm dev`
 

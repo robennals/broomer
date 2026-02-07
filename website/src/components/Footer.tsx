@@ -5,7 +5,7 @@ export default function Footer() {
         Broomy &mdash; Open source desktop app for managing AI coding agents.
         <br className="sm:hidden" />{' '}
         <a
-          href="https://github.com/robennals/broomer/blob/main/LICENSE"
+          href="https://github.com/broomy-ai/broomy/blob/main/LICENSE"
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-text-body"
@@ -14,7 +14,7 @@ export default function Footer() {
         </a>{' '}
         &middot;{' '}
         <a
-          href="https://github.com/robennals/broomer"
+          href="https://github.com/broomy-ai/broomy"
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-text-body"

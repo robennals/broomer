@@ -12,7 +12,7 @@ export default function OpenSource() {
 
         <div className="mt-10">
           <a
-            href="https://github.com/robennals/broomer"
+            href="https://github.com/broomy-ai/broomy"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg border border-border-hover px-8 py-4 text-lg font-semibold text-text-primary transition-transform hover:scale-[1.02] hover:border-text-muted"
@@ -29,7 +29,7 @@ export default function OpenSource() {
             View on GitHub &rarr;
           </a>
           <p className="mt-4 font-mono text-sm text-text-muted">
-            github.com/robennals/broomer
+            github.com/broomy-ai/broomy
           </p>
         </div>
       </div>

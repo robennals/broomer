@@ -119,8 +119,9 @@ Links directly to the `.dmg` file from the latest GitHub Release. No intermediat
 
 **Build from source** (secondary, for contributors):
 ```bash
-git clone https://github.com/robennals/broomer.git
-cd broomer/main
+git clone https://github.com/broomy-ai/broomy.git
+cd broomy
+
 pnpm install
 pnpm dev
 ```

@@ -17,7 +17,7 @@ export default function Hero() {
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <DownloadButton />
           <a
-            href="https://github.com/robennals/broomer"
+            href="https://github.com/broomy-ai/broomy"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg border border-border-hover px-8 py-4 text-lg font-semibold text-text-primary transition-transform hover:scale-[1.02] hover:border-text-muted"
