@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['src/test/setup.ts'],
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     coverage: {
       provider: 'v8',
       include: [
@@ -20,7 +20,9 @@ export default defineConfig({
         'src/renderer/utils/terminalBufferRegistry.ts',
         'src/renderer/panels/registry.ts',
         'src/renderer/store/errors.ts',
-        'src/renderer/utils/claudeOutputParser.ts',
+        'src/renderer/utils/gitStatusNormalizer.ts',
+        'src/renderer/utils/fileNavigation.ts',
+        'src/renderer/utils/terminalActivityDetector.ts',
         'src/renderer/store/agents.ts',
         'src/renderer/store/profiles.ts',
         'src/renderer/store/repos.ts',

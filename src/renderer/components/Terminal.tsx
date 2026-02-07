@@ -6,6 +6,7 @@ import { useErrorStore } from '../store/errors'
 import { useSessionStore } from '../store/sessions'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 import { stripAnsi } from '../utils/stripAnsi'
+import { evaluateActivity } from '../utils/terminalActivityDetector'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
@@ -281,34 +282,30 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
           }
 
           // Activity detection for agent terminals
-          if (isAgent && data.length > 0 && (Date.now() - effectStartTime >= 5000)) {
+          if (isAgent) {
             const now = Date.now()
-            const timeSinceInput = now - lastUserInputRef.current
-            const timeSinceInteraction = now - lastInteractionRef.current
-            const isPaused = timeSinceInput < 200 || timeSinceInteraction < 200
+            const result = evaluateActivity(data.length, now, {
+              lastUserInput: lastUserInputRef.current,
+              lastInteraction: lastInteractionRef.current,
+              lastStatus: lastStatusRef.current,
+              startTime: effectStartTime,
+            })
 
-            if (isPaused) {
-              if (idleTimeoutRef.current) {
+            if (result.status === 'working') {
+              if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current)
+              lastStatusRef.current = 'working'
+              scheduleUpdate({ status: 'working' })
+            }
+
+            if (result.scheduleIdle) {
+              if (result.status !== 'working' && idleTimeoutRef.current) {
                 clearTimeout(idleTimeoutRef.current)
               }
               idleTimeoutRef.current = setTimeout(() => {
                 lastStatusRef.current = 'idle'
                 scheduleUpdate({ status: 'idle' })
               }, 1000)
-              return
             }
-
-            if (idleTimeoutRef.current) {
-              clearTimeout(idleTimeoutRef.current)
-            }
-
-            lastStatusRef.current = 'working'
-            scheduleUpdate({ status: 'working' })
-
-            idleTimeoutRef.current = setTimeout(() => {
-              lastStatusRef.current = 'idle'
-              scheduleUpdate({ status: 'idle' })
-            }, 1000)
           }
         })
 

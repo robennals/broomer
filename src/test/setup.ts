@@ -103,33 +103,68 @@ const mockFs = {
   onChange: vi.fn().mockReturnValue(() => {}),
 }
 
-// Mock window.location
-const mockLocation = {
-  search: '',
-  href: 'http://localhost',
-  origin: 'http://localhost',
-  protocol: 'http:',
-  host: 'localhost',
-  hostname: 'localhost',
-  port: '',
-  pathname: '/',
-  hash: '',
-} as Location
+// Mock window.pty
+const mockPty = {
+  create: vi.fn().mockResolvedValue(undefined),
+  write: vi.fn().mockResolvedValue(undefined),
+  resize: vi.fn().mockResolvedValue(undefined),
+  kill: vi.fn().mockResolvedValue(undefined),
+  onData: vi.fn().mockReturnValue(() => {}),
+  onExit: vi.fn().mockReturnValue(() => {}),
+}
 
-// Apply mocks to globalThis
-Object.defineProperty(globalThis, 'window', {
-  value: {
-    config: mockConfig,
-    git: mockGit,
-    app: mockApp,
-    profiles: mockProfiles,
-    gh: mockGh,
-    shell: mockShell,
-    repos: mockRepos,
-    menu: mockMenu,
-    ts: mockTs,
-    fs: mockFs,
-    location: mockLocation,
-  },
-  writable: true,
-})
+// Mock window.dialog
+const mockDialog = {
+  openFolder: vi.fn().mockResolvedValue(null),
+}
+
+// All Broomy-specific mocks to attach to window
+const broomyMocks = {
+  config: mockConfig,
+  git: mockGit,
+  app: mockApp,
+  profiles: mockProfiles,
+  gh: mockGh,
+  shell: mockShell,
+  repos: mockRepos,
+  menu: mockMenu,
+  ts: mockTs,
+  fs: mockFs,
+  pty: mockPty,
+  dialog: mockDialog,
+}
+
+// If running in a DOM environment (jsdom/happy-dom), extend the existing window.
+// If running in node environment, create a minimal window mock.
+if (typeof globalThis.window !== 'undefined' && typeof globalThis.document !== 'undefined') {
+  // DOM environment — add Broomy APIs to the existing window
+  Object.assign(globalThis.window, broomyMocks)
+  // Ensure confirm is mocked
+  if (!globalThis.window.confirm || typeof globalThis.window.confirm !== 'function') {
+    (globalThis.window as unknown as Record<string, unknown>).confirm = vi.fn().mockReturnValue(true)
+  }
+} else {
+  // Node environment — create a minimal window object
+  Object.defineProperty(globalThis, 'window', {
+    value: {
+      ...broomyMocks,
+      location: {
+        search: '',
+        href: 'http://localhost',
+        origin: 'http://localhost',
+        protocol: 'http:',
+        host: 'localhost',
+        hostname: 'localhost',
+        port: '',
+        pathname: '/',
+        hash: '',
+      },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      navigator: { platform: 'MacIntel', clipboard: { writeText: vi.fn() } },
+      confirm: vi.fn().mockReturnValue(true),
+    },
+    writable: true,
+  })
+}

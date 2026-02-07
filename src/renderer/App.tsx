@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import type { GitFileStatus, GitStatusResult } from '../preload/index'
+import type { GitStatusResult } from '../preload/index'
 import Layout from './components/Layout'
 import SessionList from './components/SessionList'
 import Terminal from './components/Terminal'
@@ -19,6 +19,8 @@ import { useErrorStore } from './store/errors'
 import { PanelProvider, PANEL_IDS } from './panels'
 import { terminalBufferRegistry } from './utils/terminalBufferRegistry'
 import { computeBranchStatus } from './utils/branchStatus'
+import { normalizeGitStatus } from './utils/gitStatusNormalizer'
+import { resolveNavigation, applyPendingNavigation, type NavigationTarget } from './utils/fileNavigation'
 import { loadMonacoProjectContext } from './utils/monacoProjectContext'
 
 // Re-export types for backwards compatibility
@@ -81,15 +83,7 @@ function AppContent() {
   const [diffLabel, setDiffLabel] = useState<string | undefined>(undefined)
   const [showPanelPicker, setShowPanelPicker] = useState(false)
   const [isFileViewerDirty, setIsFileViewerDirty] = useState(false)
-  const [pendingNavigation, setPendingNavigation] = useState<{
-    filePath: string
-    openInDiffMode: boolean
-    scrollToLine?: number
-    searchHighlight?: string
-    diffBaseRef?: string
-    diffCurrentRef?: string
-    diffLabel?: string
-  } | null>(null)
+  const [pendingNavigation, setPendingNavigation] = useState<NavigationTarget | null>(null)
   const saveCurrentFileRef = React.useRef<(() => Promise<void>) | null>(null)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
@@ -109,43 +103,6 @@ function AppContent() {
       checkDirectories()
     }
   }, [sessions])
-
-  // Normalize git status response - handles both old array format and new object format
-  const normalizeGitStatus = useCallback((status: unknown): GitStatusResult => {
-    // New format: object with files array
-    if (status && typeof status === 'object' && !Array.isArray(status) && 'files' in status) {
-      const s = status as GitStatusResult
-      return {
-        files: (s.files || []).map(f => ({
-          ...f,
-          staged: f.staged ?? false,
-          indexStatus: f.indexStatus ?? ' ',
-          workingDirStatus: f.workingDirStatus ?? ' ',
-        })),
-        ahead: s.ahead ?? 0,
-        behind: s.behind ?? 0,
-        tracking: s.tracking ?? null,
-        current: s.current ?? null,
-      }
-    }
-    // Old format: flat array of {path, status}
-    if (Array.isArray(status)) {
-      return {
-        files: status.map((f: GitFileStatus) => ({
-          path: f.path,
-          status: f.status,
-          staged: f.staged ?? false,
-          indexStatus: f.indexStatus ?? ' ',
-          workingDirStatus: f.workingDirStatus ?? ' ',
-        })),
-        ahead: 0,
-        behind: 0,
-        tracking: null,
-        current: null,
-      }
-    }
-    return { files: [], ahead: 0, behind: 0, tracking: null, current: null }
-  }, [])
 
   // Fetch git status for active session
   const fetchGitStatus = useCallback(async () => {
@@ -177,7 +134,7 @@ function AppContent() {
     } catch {
       // Ignore errors
     }
-  }, [activeSession?.id, activeSession?.directory, activeSession?.repoId, repos, normalizeGitStatus])
+  }, [activeSession?.id, activeSession?.directory, activeSession?.repoId, repos])
 
   // Poll git status every 2 seconds
   useEffect(() => {
@@ -388,27 +345,23 @@ function AppContent() {
   // Navigate to a file, checking for unsaved changes first
   const navigateToFile = useCallback((filePath: string, openInDiffMode: boolean, scrollToLine?: number, searchHighlight?: string, diffBaseRef?: string, diffCurrentRef?: string, diffLabel?: string) => {
     if (!activeSessionId) return
-    // If same file, just update scroll/highlight
-    if (filePath === activeSession?.selectedFilePath) {
-      setOpenFileInDiffMode(openInDiffMode)
-      setScrollToLine(scrollToLine)
-      setSearchHighlight(searchHighlight)
-      setDiffBaseRef(diffBaseRef)
-      setDiffCurrentRef(diffCurrentRef)
-      setDiffLabel(diffLabel)
-      return
+    const target: NavigationTarget = { filePath, openInDiffMode, scrollToLine, searchHighlight, diffBaseRef, diffCurrentRef, diffLabel }
+    const result = resolveNavigation(target, activeSession?.selectedFilePath ?? null, isFileViewerDirty)
+
+    if (result.action === 'update-scroll' || result.action === 'navigate') {
+      setOpenFileInDiffMode(result.state.openFileInDiffMode)
+      setScrollToLine(result.state.scrollToLine)
+      setSearchHighlight(result.state.searchHighlight)
+      setDiffBaseRef(result.state.diffBaseRef)
+      setDiffCurrentRef(result.state.diffCurrentRef)
+      setDiffLabel(result.state.diffLabel)
     }
-    if (isFileViewerDirty) {
-      setPendingNavigation({ filePath, openInDiffMode, scrollToLine, searchHighlight, diffBaseRef, diffCurrentRef, diffLabel })
-      return
+    if (result.action === 'navigate') {
+      selectFile(activeSessionId, result.filePath)
     }
-    setOpenFileInDiffMode(openInDiffMode)
-    setScrollToLine(scrollToLine)
-    setSearchHighlight(searchHighlight)
-    setDiffBaseRef(diffBaseRef)
-    setDiffCurrentRef(diffCurrentRef)
-    setDiffLabel(diffLabel)
-    selectFile(activeSessionId, filePath)
+    if (result.action === 'pending') {
+      setPendingNavigation(result.target)
+    }
   }, [activeSessionId, activeSession?.selectedFilePath, isFileViewerDirty, selectFile])
 
   const handlePendingSave = useCallback(async () => {
@@ -416,13 +369,14 @@ function AppContent() {
       await saveCurrentFileRef.current()
     }
     if (pendingNavigation && activeSessionId) {
-      setOpenFileInDiffMode(pendingNavigation.openInDiffMode)
-      setScrollToLine(pendingNavigation.scrollToLine)
-      setSearchHighlight(pendingNavigation.searchHighlight)
-      setDiffBaseRef(pendingNavigation.diffBaseRef)
-      setDiffCurrentRef(pendingNavigation.diffCurrentRef)
-      setDiffLabel(pendingNavigation.diffLabel)
-      selectFile(activeSessionId, pendingNavigation.filePath)
+      const { state, filePath } = applyPendingNavigation(pendingNavigation)
+      setOpenFileInDiffMode(state.openFileInDiffMode)
+      setScrollToLine(state.scrollToLine)
+      setSearchHighlight(state.searchHighlight)
+      setDiffBaseRef(state.diffBaseRef)
+      setDiffCurrentRef(state.diffCurrentRef)
+      setDiffLabel(state.diffLabel)
+      selectFile(activeSessionId, filePath)
     }
     setPendingNavigation(null)
     setIsFileViewerDirty(false)
@@ -430,14 +384,15 @@ function AppContent() {
 
   const handlePendingDiscard = useCallback(() => {
     if (pendingNavigation && activeSessionId) {
-      setOpenFileInDiffMode(pendingNavigation.openInDiffMode)
-      setScrollToLine(pendingNavigation.scrollToLine)
-      setSearchHighlight(pendingNavigation.searchHighlight)
-      setDiffBaseRef(pendingNavigation.diffBaseRef)
-      setDiffCurrentRef(pendingNavigation.diffCurrentRef)
-      setDiffLabel(pendingNavigation.diffLabel)
+      const { state, filePath } = applyPendingNavigation(pendingNavigation)
+      setOpenFileInDiffMode(state.openFileInDiffMode)
+      setScrollToLine(state.scrollToLine)
+      setSearchHighlight(state.searchHighlight)
+      setDiffBaseRef(state.diffBaseRef)
+      setDiffCurrentRef(state.diffCurrentRef)
+      setDiffLabel(state.diffLabel)
       setIsFileViewerDirty(false)
-      selectFile(activeSessionId, pendingNavigation.filePath)
+      selectFile(activeSessionId, filePath)
     }
     setPendingNavigation(null)
   }, [pendingNavigation, activeSessionId, selectFile])

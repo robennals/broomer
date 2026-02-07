@@ -33,16 +33,16 @@ Broomy follows the standard Electron three-process model:
 │                     Renderer Process (React)                         │
 │                                                                     │
 │  Zustand Stores          React Components        Utility Modules    │
-│  ├── sessions.ts         ├── Layout.tsx          ├── claudeOutput   │
-│  ├── agents.ts           ├── Terminal.tsx        │   Parser.ts      │
-│  ├── repos.ts            ├── Explorer.tsx        ├── explorerHelp   │
-│  ├── profiles.ts         ├── FileViewer.tsx      │   ers.ts         │
-│  └── errors.ts           ├── SessionList.tsx     ├── slugify.ts     │
-│                          ├── NewSessionDialog    ├── textDetect     │
-│  Panel System            │   .tsx                │   ion.ts         │
-│  ├── registry.ts         ├── AgentSettings.tsx   └── terminalBuf   │
-│  ├── types.ts            ├── TabbedTerminal.tsx      ferRegistry.ts │
-│  ├── builtinPanels.tsx   └── ProfileChip.tsx                        │
+│  ├── sessions.ts         ├── Layout.tsx          ├── stripAnsi.ts   │
+│  ├── agents.ts           ├── Terminal.tsx        ├── explorerHelp   │
+│  ├── repos.ts            ├── Explorer.tsx        │   ers.ts         │
+│  ├── profiles.ts         ├── FileViewer.tsx      ├── slugify.ts     │
+│  └── errors.ts           ├── SessionList.tsx     ├── textDetect     │
+│                          ├── NewSessionDialog    │   ion.ts         │
+│  Panel System            │   .tsx                ├── branchStatus   │
+│  ├── registry.ts         ├── AgentSettings.tsx   │   .ts            │
+│  ├── types.ts            ├── TabbedTerminal.tsx  └── terminalBuf   │
+│  ├── builtinPanels.tsx   └── ProfileChip.tsx         ferRegistry.ts │
 │  └── PanelContext.tsx                                               │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -309,52 +309,46 @@ Each PTY and file watcher is tracked by the window that created it. This ensures
 
 ## Agent Activity Detection
 
-The `ClaudeOutputParser` class (`utils/claudeOutputParser.ts`) analyzes terminal output to determine agent status.
+Agent status is detected by time-based heuristics in `Terminal.tsx` (lines 283-312). Rather than parsing terminal output for specific patterns, the detector uses timing to determine whether the agent is working or idle.
 
 ### Detection Flow
 
 ```
-Terminal output data
+Terminal output data arrives
         │
         ▼
 ┌─────────────────┐
-│  Strip ANSI     │  Remove escape sequences, control characters
-│  escape codes   │
+│  Warmup check   │  Ignore first 5 seconds after terminal creation
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Check for      │  Look for "Claude", spinner chars, status icons
-│  Claude presence│  (Only detect states after Claude is confirmed)
+│  Input check    │  Was there user input or window interaction
+│                 │  within the last 200ms? If so, pause detection.
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Detect status  │  Check for working patterns (spinners, "Vibing...")
-│                 │  Check for idle prompt (❯)
-│                 │  Check for menus/prompts (not idle)
+│  Set working    │  Immediately update status to 'working'
+│                 │  (flushed to store without debounce)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Extract        │  Find action lines (Read, Write, Edit results)
-│  message        │  Fall back to last meaningful non-status line
-│                 │  Filter garbage (escape remnants, short strings)
-└────────┬────────┘
-         │
-         ▼
-  { status, message }
+│  Start idle     │  After 1 second of no output, set status
+│  timeout        │  to 'idle' (300ms debounce for store update)
+└─────────────────┘
 ```
 
 ### Status States
 
-- **working** -- Spinner characters present, or working keywords detected (e.g., "Vibing...", "Reading file.ts")
-- **idle** -- Claude's prompt `❯` is visible and no menu/confirmation is active
+- **working** -- Terminal output is actively being received (set immediately)
+- **idle** -- No terminal output for 1 second (debounced 300ms before store update)
 - **error** -- Set externally when the PTY process exits with a non-zero code
 
 ### Unread Notifications
 
-When a session transitions from `working` to `idle`, it's marked as `isUnread: true`. This tells the user "the agent finished doing something -- you should check the results." Clicking the session clears the unread state.
+When a session transitions from `working` to `idle` after at least 3 seconds of working, it's marked as `isUnread: true`. This tells the user "the agent finished doing something -- you should check the results." Clicking the session clears the unread state. Brief working periods (< 3 seconds) are filtered out to avoid false alerts from notifications like usage threshold warnings.
 
 ---
 

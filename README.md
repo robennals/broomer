@@ -140,9 +140,10 @@ broomy/
 │       │   ├── profiles.ts      # Multi-window profiles
 │       │   └── errors.ts        # Application error tracking
 │       └── utils/               # Shared utilities
-│           ├── claudeOutputParser.ts  # Agent status detection from terminal output
+│           ├── stripAnsi.ts           # ANSI escape code removal
 │           ├── explorerHelpers.ts     # Git status display helpers
 │           ├── terminalBufferRegistry.ts # Cross-component terminal buffer access
+│           ├── branchStatus.ts        # Branch status computation
 │           ├── slugify.ts             # Issue-to-branch-name conversion
 │           └── textDetection.ts       # Binary vs text file detection
 ├── scripts/

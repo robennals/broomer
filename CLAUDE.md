@@ -44,16 +44,17 @@ Broomy is an Electron + React desktop app for managing multiple AI coding agent 
 - **Stores** (`store/`): Four Zustand stores -- `sessions.ts` (session state, panel visibility, layout sizes, agent monitoring), `agents.ts` (agent definitions), `repos.ts` (managed repositories), `profiles.ts` (multi-window profiles), `errors.ts` (error tracking).
 - **Components** (`components/`): `Layout.tsx` (main layout with drag-to-resize), `Terminal.tsx` (xterm.js wrapper), `Explorer.tsx` (file tree + source control), `FileViewer.tsx` (Monaco editor + diff), `SessionList.tsx`, `TabbedTerminal.tsx`, `NewSessionDialog.tsx`, `AgentSettings.tsx`, `ProfileChip.tsx`.
 - **Panel system** (`panels/`): Registry-based modular panel system. Panel IDs defined in `types.ts`, registered in `builtinPanels.tsx`, accessed via React context in `PanelContext.tsx`. Six built-in panels: sidebar, explorer, fileViewer, agentTerminal, userTerminal, settings.
-- **Utils** (`utils/`): `claudeOutputParser.ts` (agent status detection from terminal output), `explorerHelpers.ts` (git status display), `terminalBufferRegistry.ts` (cross-component terminal access), `slugify.ts` (issue-to-branch names), `textDetection.ts` (binary vs text).
+- **Utils** (`utils/`): `stripAnsi.ts` (ANSI escape removal), `explorerHelpers.ts` (git status display), `terminalBufferRegistry.ts` (cross-component terminal access), `slugify.ts` (issue-to-branch names), `textDetection.ts` (binary vs text), `branchStatus.ts` (branch status computation).
 
 ### Agent Activity Detection
 
-Agent status is detected by `ClaudeOutputParser` in `utils/claudeOutputParser.ts`. It strips ANSI escape codes, then checks for:
-- **Working**: Spinner characters, keywords like "Vibing...", "Reading", tool execution patterns
-- **Idle**: Claude's `❯` prompt (excluding menus and confirmation dialogs)
-- **Messages**: Action lines (Read/Write/Edit results) are prioritized over generic output
+Agent status is detected by time-based heuristics in `Terminal.tsx`. The detection logic:
+- **Warmup**: Ignores the first 5 seconds after terminal creation
+- **Input suppression**: Pauses detection for 200ms after user input or window interaction
+- **Working**: Set immediately when terminal data arrives (if not paused)
+- **Idle**: Set after 1 second of no terminal output, with a 300ms debounce for store updates
 
-When a session transitions from working to idle, it's marked as `isUnread` to alert the user.
+When a session transitions from working to idle (after at least 3 seconds of working), it's marked as `isUnread` to alert the user.
 
 ### Data Persistence
 
