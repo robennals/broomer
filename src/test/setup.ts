@@ -32,6 +32,7 @@ const mockGit = {
   listBranches: vi.fn().mockResolvedValue([]),
   fetchPrHead: vi.fn().mockResolvedValue({ success: true }),
   isMergedInto: vi.fn().mockResolvedValue(false),
+  hasBranchCommits: vi.fn().mockResolvedValue(false),
   pullOriginMain: vi.fn().mockResolvedValue({ success: true }),
   isBehindMain: vi.fn().mockResolvedValue({ behind: 0, defaultBranch: 'main' }),
   getConfig: vi.fn().mockResolvedValue(null),

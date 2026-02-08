@@ -101,6 +101,11 @@ function BranchStatusCard({ status }: { status: BranchStatus }) {
       chipClasses: 'bg-blue-500/20 text-blue-400',
       description: 'Changes pushed to remote. Consider creating a PR.',
     },
+    empty: {
+      label: 'EMPTY',
+      chipClasses: 'bg-gray-500/20 text-gray-400',
+      description: 'No changes on this branch.',
+    },
     open: {
       label: 'PR OPEN',
       chipClasses: 'bg-green-500/20 text-green-400',

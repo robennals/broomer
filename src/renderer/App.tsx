@@ -126,11 +126,18 @@ function AppContent() {
       if (!isOnMain && normalized.current) {
         const repo = repos.find(r => r.id === activeSession.repoId)
         const defaultBranch = repo?.defaultBranch || 'main'
-        const merged = await window.git.isMergedInto(activeSession.directory, defaultBranch)
+        const [merged, hasBranchCommitsResult] = await Promise.all([
+          window.git.isMergedInto(activeSession.directory, defaultBranch),
+          window.git.hasBranchCommits(activeSession.directory, defaultBranch),
+        ])
         setIsMergedBySession(prev => ({
           ...prev,
           [activeSession.id]: merged
         }))
+        // Also mark hasHadCommits if the branch has diverged from main
+        if (hasBranchCommitsResult) {
+          markHasHadCommits(activeSession.id)
+        }
       } else {
         setIsMergedBySession(prev => ({
           ...prev,

@@ -1,4 +1,4 @@
-export type BranchStatus = 'in-progress' | 'pushed' | 'open' | 'merged' | 'closed'
+export type BranchStatus = 'in-progress' | 'pushed' | 'empty' | 'open' | 'merged' | 'closed'
 
 export type PrState = 'OPEN' | 'MERGED' | 'CLOSED' | null
 
@@ -37,12 +37,14 @@ export function computeBranchStatus(input: BranchStatusInput): BranchStatus {
   }
 
   // 3. Git-native merge check (works for UI push, terminal push, and GitHub PR merge)
-  // Require both hasHadCommits and hasTrackingBranch to avoid false positives:
-  // a fresh branch with no commits also has 0 commits ahead of main, which the git
-  // check interprets as "merged". The app pushes branches upstream on creation,
-  // so hasTrackingBranch alone is insufficient.
   if (isMergedToMain && hasHadCommits && hasTrackingBranch) {
     return 'merged'
+  }
+
+  // 3b. Fresh branch with tracking: isMergedToMain is true because there are 0 commits
+  // ahead of main, but there were never any commits — this is an empty/fresh branch.
+  if (isMergedToMain && !hasHadCommits && hasTrackingBranch) {
+    return 'empty'
   }
 
   // 4. Check persisted PR state

@@ -49,12 +49,12 @@ describe('computeBranchStatus', () => {
     }))).toBe('in-progress')
   })
 
-  it('returns pushed when isMergedToMain but no commits ever made (fresh branch)', () => {
-    // A fresh branch that was pushed but never had commits shows as "pushed", not "merged"
+  it('returns empty when isMergedToMain but no commits ever made (fresh branch)', () => {
+    // A fresh branch that was pushed but never had commits shows as "empty"
     expect(computeBranchStatus(makeInput({
       isMergedToMain: true,
       hasTrackingBranch: true,
-    }))).toBe('pushed')
+    }))).toBe('empty')
   })
 
   it('returns in-progress when isMergedToMain but no tracking branch', () => {
