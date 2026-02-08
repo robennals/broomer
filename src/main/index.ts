@@ -1155,6 +1155,108 @@ ipcMain.handle('git:isMergedInto', async (_event, repoPath: string, ref: string)
   }
 })
 
+ipcMain.handle('git:pullOriginMain', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+
+    // Detect default branch
+    let defaultBranch = 'main'
+    try {
+      const ref = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD'])
+      defaultBranch = ref.trim().replace('refs/remotes/origin/', '')
+    } catch {
+      try {
+        await git.raw(['rev-parse', '--verify', 'origin/main'])
+        defaultBranch = 'main'
+      } catch {
+        defaultBranch = 'master'
+      }
+    }
+
+    // Fetch latest from origin
+    await git.fetch('origin', defaultBranch)
+
+    // Merge origin/<defaultBranch> into current branch
+    try {
+      await git.merge([`origin/${defaultBranch}`])
+      return { success: true }
+    } catch (mergeError) {
+      const errorStr = String(mergeError)
+      const hasConflicts = errorStr.includes('CONFLICTS') || errorStr.includes('Merge conflict') || errorStr.includes('fix conflicts')
+      return { success: false, hasConflicts, error: errorStr }
+    }
+  } catch (error) {
+    return { success: false, hasConflicts: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('git:isBehindMain', async (_event, repoPath: string) => {
+  if (isE2ETest) {
+    return { behind: 0, defaultBranch: 'main' }
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+
+    // Detect default branch
+    let defaultBranch = 'main'
+    try {
+      const ref = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD'])
+      defaultBranch = ref.trim().replace('refs/remotes/origin/', '')
+    } catch {
+      try {
+        await git.raw(['rev-parse', '--verify', 'origin/main'])
+        defaultBranch = 'main'
+      } catch {
+        defaultBranch = 'master'
+      }
+    }
+
+    // Fetch origin to get latest refs
+    await git.fetch('origin', defaultBranch)
+
+    // Count commits we're behind
+    const output = await git.raw(['rev-list', '--count', `HEAD..origin/${defaultBranch}`])
+    const behind = parseInt(output.trim(), 10) || 0
+
+    return { behind, defaultBranch }
+  } catch {
+    return { behind: 0, defaultBranch: 'main' }
+  }
+})
+
+ipcMain.handle('git:getConfig', async (_event, repoPath: string, key: string) => {
+  if (isE2ETest) {
+    return null
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    const value = await git.raw(['config', '--get', key])
+    return value.trim() || null
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('git:setConfig', async (_event, repoPath: string, key: string, value: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    await git.raw(['config', key, value])
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
 ipcMain.handle('git:branchChanges', async (_event, repoPath: string, baseBranch?: string) => {
   if (isE2ETest) {
     return {

@@ -493,6 +493,7 @@ function AppContent() {
         branchStatus={activeSession?.branchStatus ?? 'in-progress'}
         onUpdatePrState={(prState, prNumber, prUrl) => activeSessionId && updatePrState(activeSessionId, prState, prNumber, prUrl)}
         repoId={activeSession?.repoId}
+        agentPtyId={activeSession?.agentPtyId}
       />
     ) : null,
     [PANEL_IDS.FILE_VIEWER]: activeSession?.showFileViewer ? (

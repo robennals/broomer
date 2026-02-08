@@ -148,6 +148,10 @@ export type GitApi = {
   fetchBranch: (repoPath: string, branchName: string) => Promise<{ success: boolean; error?: string }>
   fetchPrHead: (repoPath: string, prNumber: number) => Promise<{ success: boolean; error?: string }>
   isMergedInto: (repoPath: string, ref: string) => Promise<boolean>
+  pullOriginMain: (repoPath: string) => Promise<{ success: boolean; hasConflicts?: boolean; error?: string }>
+  isBehindMain: (repoPath: string) => Promise<{ behind: number; defaultBranch: string }>
+  getConfig: (repoPath: string, key: string) => Promise<string | null>
+  setConfig: (repoPath: string, key: string, value: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export type GhApi = {
@@ -336,6 +340,10 @@ const gitApi: GitApi = {
   fetchBranch: (repoPath, branchName) => ipcRenderer.invoke('git:fetchBranch', repoPath, branchName),
   fetchPrHead: (repoPath, prNumber) => ipcRenderer.invoke('git:fetchPrHead', repoPath, prNumber),
   isMergedInto: (repoPath, ref) => ipcRenderer.invoke('git:isMergedInto', repoPath, ref),
+  pullOriginMain: (repoPath) => ipcRenderer.invoke('git:pullOriginMain', repoPath),
+  isBehindMain: (repoPath) => ipcRenderer.invoke('git:isBehindMain', repoPath),
+  getConfig: (repoPath, key) => ipcRenderer.invoke('git:getConfig', repoPath, key),
+  setConfig: (repoPath, key, value) => ipcRenderer.invoke('git:setConfig', repoPath, key, value),
 }
 
 const ghApi: GhApi = {
