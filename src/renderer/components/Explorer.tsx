@@ -39,6 +39,7 @@ interface ExplorerProps {
   branchStatus?: BranchStatus
   onUpdatePrState?: (prState: PrState, prNumber?: number, prUrl?: string) => void
   repoId?: string
+  agentPtyId?: string
 }
 
 interface TreeNode extends FileEntry {
@@ -100,6 +101,11 @@ function BranchStatusCard({ status }: { status: BranchStatus }) {
       chipClasses: 'bg-blue-500/20 text-blue-400',
       description: 'Changes pushed to remote. Consider creating a PR.',
     },
+    empty: {
+      label: 'EMPTY',
+      chipClasses: 'bg-gray-500/20 text-gray-400',
+      description: 'No changes on this branch.',
+    },
     open: {
       label: 'PR OPEN',
       chipClasses: 'bg-green-500/20 text-green-400',
@@ -149,6 +155,7 @@ export default function Explorer({
   branchStatus,
   onUpdatePrState,
   repoId,
+  agentPtyId,
 }: ExplorerProps) {
   const [tree, setTree] = useState<TreeNode[]>([])
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -165,6 +172,7 @@ export default function Explorer({
   const [commitError, setCommitError] = useState<string | null>(null)
   const [commitErrorExpanded, setCommitErrorExpanded] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isSyncingWithMain, setIsSyncingWithMain] = useState(false)
   const [gitOpError, setGitOpError] = useState<{ operation: string; message: string } | null>(null)
   const [scView, setScView] = useState<'working' | 'branch' | 'commits' | 'comments'>('working')
   const [branchChanges, setBranchChanges] = useState<{ path: string; status: string }[]>([])
@@ -668,11 +676,59 @@ export default function Explorer({
     }
   }
 
+  const handleSyncWithMain = async () => {
+    if (!directory) return
+
+    // Check for uncommitted changes
+    if (gitStatus.length > 0) {
+      setGitOpError({ operation: 'Sync with main', message: 'Commit or stash changes before syncing with main' })
+      return
+    }
+
+    setIsSyncingWithMain(true)
+    setGitOpError(null)
+    try {
+      const result = await window.git.pullOriginMain(directory)
+      if (result.success) {
+        onGitStatusRefresh?.()
+      } else if (result.hasConflicts) {
+        // Send conflict resolution command to agent terminal
+        if (agentPtyId) {
+          await window.pty.write(agentPtyId, 'resolve all merge conflicts\r')
+          setGitOpError({ operation: 'Sync with main', message: 'Merge conflicts detected. Agent is resolving them.' })
+        } else {
+          setGitOpError({ operation: 'Sync with main', message: 'Merge conflicts detected. Resolve them manually.' })
+        }
+        onGitStatusRefresh?.()
+      } else {
+        setGitOpError({ operation: 'Sync with main', message: result.error || 'Sync failed' })
+      }
+    } catch (err) {
+      setGitOpError({ operation: 'Sync with main', message: String(err) })
+    } finally {
+      setIsSyncingWithMain(false)
+    }
+  }
+
   const handlePushToMain = async () => {
     if (!directory) return
     setIsPushingToMain(true)
     setGitOpError(null)
     try {
+      // Check if we're behind origin's main branch
+      const behindInfo = await window.git.isBehindMain(directory)
+      if (behindInfo.behind > 0) {
+        setIsPushingToMain(false)
+        const shouldSync = window.confirm(
+          `Main has ${behindInfo.behind} new commit${behindInfo.behind !== 1 ? 's' : ''}. Sync with main first?`
+        )
+        if (shouldSync) {
+          await handleSyncWithMain()
+          return
+        }
+        setIsPushingToMain(true)
+      }
+
       const result = await window.gh.mergeBranchToMain(directory)
       if (result.success) {
         // Record the push with current HEAD commit
@@ -950,6 +1006,17 @@ export default function Explorer({
                 #{prStatus.number}: {prStatus.title}
               </button>
             </div>
+            {prStatus.state === 'OPEN' && gitStatus.length === 0 && syncStatus?.current !== branchBaseName && (
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  onClick={handleSyncWithMain}
+                  disabled={isSyncingWithMain}
+                  className="px-2 py-1 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
+                >
+                  {isSyncingWithMain ? 'Syncing...' : `Sync with ${branchBaseName}`}
+                </button>
+              </div>
+            )}
           </div>
         ) : branchStatus === 'merged' ? (
           <div className="flex items-center gap-2">
@@ -965,7 +1032,7 @@ export default function Explorer({
             <div className="text-xs text-text-secondary">
               No PR for this branch
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleCreatePr}
                 className="px-2 py-1 text-xs rounded bg-accent text-white hover:bg-accent/80"
@@ -979,6 +1046,15 @@ export default function Explorer({
                   className="px-2 py-1 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
                 >
                   {isPushingToMain ? 'Pushing...' : `Push to ${branchBaseName}`}
+                </button>
+              )}
+              {gitStatus.length === 0 && (
+                <button
+                  onClick={handleSyncWithMain}
+                  disabled={isSyncingWithMain}
+                  className="px-2 py-1 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
+                >
+                  {isSyncingWithMain ? 'Syncing...' : `Sync with ${branchBaseName}`}
                 </button>
               )}
             </div>
