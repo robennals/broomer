@@ -148,6 +148,7 @@ export type GitApi = {
   fetchBranch: (repoPath: string, branchName: string) => Promise<{ success: boolean; error?: string }>
   fetchPrHead: (repoPath: string, prNumber: number) => Promise<{ success: boolean; error?: string }>
   isMergedInto: (repoPath: string, ref: string) => Promise<boolean>
+  hasBranchCommits: (repoPath: string, ref: string) => Promise<boolean>
 }
 
 export type GhApi = {
@@ -336,6 +337,7 @@ const gitApi: GitApi = {
   fetchBranch: (repoPath, branchName) => ipcRenderer.invoke('git:fetchBranch', repoPath, branchName),
   fetchPrHead: (repoPath, prNumber) => ipcRenderer.invoke('git:fetchPrHead', repoPath, prNumber),
   isMergedInto: (repoPath, ref) => ipcRenderer.invoke('git:isMergedInto', repoPath, ref),
+  hasBranchCommits: (repoPath, ref) => ipcRenderer.invoke('git:hasBranchCommits', repoPath, ref),
 }
 
 const ghApi: GhApi = {

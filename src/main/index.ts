@@ -1146,10 +1146,45 @@ ipcMain.handle('git:isMergedInto', async (_event, repoPath: string, ref: string)
 
   try {
     const git = simpleGit(expandHomePath(repoPath))
-    // Use rev-list --count instead of merge-base --is-ancestor
-    // because --is-ancestor communicates via exit codes which simple-git may not handle reliably
+
+    // 1. Regular merge check: branch has 0 unique commits ahead of origin/ref
     const output = await git.raw(['rev-list', '--count', 'HEAD', `^origin/${ref}`])
-    return parseInt(output.trim(), 10) === 0
+    if (parseInt(output.trim(), 10) === 0) {
+      return true
+    }
+
+    // 2. Squash merge check: branch content matches origin/ref for all changed files
+    try {
+      const mergeBase = (await git.raw(['merge-base', `origin/${ref}`, 'HEAD'])).trim()
+      const changedFiles = (await git.raw(['diff', '--name-only', mergeBase, 'HEAD'])).trim()
+      if (!changedFiles) {
+        // No files changed on branch — effectively empty/merged
+        return true
+      }
+      const fileList = changedFiles.split('\n')
+      // Check if origin/ref has the same content for all files changed on this branch
+      const diffOutput = await git.raw(['diff', '--quiet', `origin/${ref}`, 'HEAD', '--', ...fileList])
+      // diff --quiet exits 0 (no output) when files match
+      return true
+    } catch {
+      // diff --quiet exits non-zero when files differ, which simple-git throws as error
+      return false
+    }
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('git:hasBranchCommits', async (_event, repoPath: string, ref: string) => {
+  if (isE2ETest) {
+    return false
+  }
+
+  try {
+    const git = simpleGit(expandHomePath(repoPath))
+    const mergeBase = (await git.raw(['merge-base', `origin/${ref}`, 'HEAD'])).trim()
+    const output = await git.raw(['rev-list', '--count', `${mergeBase}..HEAD`])
+    return parseInt(output.trim(), 10) > 0
   } catch {
     return false
   }
