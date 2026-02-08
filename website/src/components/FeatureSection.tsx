@@ -16,12 +16,12 @@ export default function FeatureSection({
   direction,
 }: FeatureSectionProps) {
   const imageBlock = (
-    <div className="flex-[3] flex items-center justify-center">
+    <div className="flex-shrink-0">
       <div className="inline-flex overflow-hidden rounded-xl border border-border-subtle shadow-[0_25px_50px_rgba(0,0,0,0.5)] transition-transform duration-200 hover:scale-[1.01]">
         <img
           src={screenshot}
           alt={alt}
-          className="block h-auto max-h-[510px] w-auto max-w-full object-contain"
+          className="block h-auto max-h-[440px] w-auto"
           loading="lazy"
         />
       </div>
@@ -29,7 +29,7 @@ export default function FeatureSection({
   )
 
   const textBlock = (
-    <div className="flex flex-[2] flex-col justify-center">
+    <div className="flex min-w-0 flex-1 flex-col justify-center">
       <span className="font-mono text-sm font-medium uppercase tracking-wider text-accent">
         {eyebrow}
       </span>
@@ -45,8 +45,8 @@ export default function FeatureSection({
   return (
     <section className="px-6 py-16 md:px-12 lg:py-20">
       <div
-        className={`mx-auto flex max-w-[1200px] flex-col gap-12 lg:flex-row lg:items-center lg:gap-16 ${
-          direction === 'right' ? 'lg:flex-row-reverse' : ''
+        className={`mx-auto flex max-w-[900px] flex-col items-center gap-8 sm:flex-row sm:items-center sm:gap-10 ${
+          direction === 'right' ? 'sm:flex-row-reverse' : ''
         }`}
       >
         {imageBlock}
