@@ -21,7 +21,10 @@ export default function NavBar() {
       }`}
     >
       <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-3 md:px-12">
-        <span className="text-lg font-semibold text-text-primary">Broomy</span>
+        <div className="flex items-center gap-2.5">
+          <img src="/icon.png" alt="" className="h-7 w-7 rounded-md" width={28} height={28} />
+          <span className="text-lg font-semibold text-text-primary">Broomy</span>
+        </div>
         <DownloadButtons compact />
       </div>
     </nav>

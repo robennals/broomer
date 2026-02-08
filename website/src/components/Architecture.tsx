@@ -14,7 +14,8 @@ const techStack = [
 const highlights = [
   'Type-safe IPC between all processes',
   'Intelligent agent status detection via terminal output parsing',
-  'Modular panel system — show what you need, hide what you don\'t',
+  'Modular panel system — add your own panels or hide the ones you don\'t need',
+  'Registry-based architecture — plug in new agents, panels, and workflows',
   'Full E2E test suite with Playwright',
   'Zero external services — everything runs locally',
 ]
@@ -25,11 +26,12 @@ export default function Architecture() {
       <div className="mx-auto max-w-[1200px]">
         <div className="text-center">
           <h2 className="text-3xl font-semibold tracking-tight text-text-primary md:text-4xl">
-            Built for developers, by developers
+            Built to be extended
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-text-body leading-relaxed">
-            Broomy is a native desktop app built on proven technology. No web
-            wrappers. No Electron bloat. Just fast, reliable tooling.
+            Broomy is a native desktop app built on well-understood technology.
+            The codebase is designed to be readable, hackable, and easy to
+            contribute to.
           </p>
         </div>
 

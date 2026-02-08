@@ -15,14 +15,14 @@ export function DownloadButtons({ compact }: { compact?: boolean }) {
   return (
     <a
       href={RELEASE_URL}
-      className="inline-flex flex-col items-center rounded-lg bg-text-primary px-8 py-4 text-lg font-semibold text-bg-page transition-all hover:scale-[1.02] hover:shadow-lg"
+      className="inline-flex flex-col items-center rounded-lg border border-border-hover px-8 py-4 text-lg font-semibold text-text-primary transition-all hover:scale-[1.02] hover:border-text-muted"
     >
       <span className="flex items-center gap-2">
         <DownloadIcon />
         Download
       </span>
       <span className="mt-1 text-xs font-normal text-text-muted">
-        MacOS &middot; Linux &middot; Windows
+        macOS &middot; Linux &middot; Windows
       </span>
     </a>
   )

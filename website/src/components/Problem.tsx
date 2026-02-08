@@ -8,9 +8,8 @@ export default function Problem() {
           it on? What files did it change?
         </p>
         <p className="mt-6 text-lg leading-relaxed text-text-body md:text-xl">
-          You end up bouncing between terminal windows, git clients, and your
-          editor just to keep track of what&apos;s happening across your
-          projects.
+          Broomy gives you a single window to manage all of it &mdash; and since
+          it&apos;s open source, you can extend it to fit exactly how you work.
         </p>
       </div>
     </section>
