@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import { join } from 'path'
 import { homedir, tmpdir } from 'os'
 import { statusFromChar, buildPrCreateUrl } from './gitStatusParser'
+import { getCloneErrorHint } from './cloneErrorHint'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, copyFileSync, rmSync } from 'fs'
 import * as pty from 'node-pty'
 import simpleGit from 'simple-git'
@@ -1224,7 +1225,9 @@ ipcMain.handle('git:clone', async (_event, url: string, targetDir: string) => {
     await simpleGit().clone(url, expandHomePath(targetDir))
     return { success: true }
   } catch (error) {
-    return { success: false, error: String(error) }
+    const errorStr = String(error)
+    const hint = getCloneErrorHint(errorStr, url)
+    return { success: false, error: hint ? errorStr + hint : errorStr }
   }
 })
 
