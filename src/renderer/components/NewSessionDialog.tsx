@@ -363,10 +363,11 @@ function CloneView({
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://github.com/user/repo.git"
+            placeholder="https://github.com/user/repo.git or git@github.com:user/repo.git"
             className="w-full px-3 py-2 text-sm rounded border border-border bg-bg-primary text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
             autoFocus
           />
+          <p className="text-xs text-text-secondary mt-1">HTTPS (https://github.com/...) or SSH (git@github.com:...)</p>
         </div>
 
         <div>
