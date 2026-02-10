@@ -39,6 +39,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const cwdRef = useRef(cwd)
   cwdRef.current = cwd
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const [restartKey, setRestartKey] = useState(0)
   const isFollowingRef = useRef(true)
   const { addError } = useErrorStore()
   const addErrorRef = useRef(addError)
@@ -91,6 +92,17 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     isFollowingRef.current = true
     setShowScrollButton(false)
   }, [])
+
+  const handleContextMenu = useCallback(async (e: React.MouseEvent) => {
+    if (!isAgentTerminal) return
+    e.preventDefault()
+    const action = await window.menu.popup([
+      { id: 'restart-agent', label: 'Restart Agent' },
+    ])
+    if (action === 'restart-agent') {
+      setRestartKey((k) => k + 1)
+    }
+  }, [isAgentTerminal])
 
   useEffect(() => {
     if (!containerRef.current || !sessionId) return
@@ -396,7 +408,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
         terminalBufferRegistry.unregister(sessionId)
       }
     }
-  }, [sessionId]) // Only recreate terminal when session identity changes
+  }, [sessionId, restartKey]) // Recreate terminal when session identity changes or on restart
 
   // Fit when terminal becomes visible (e.g., tab switch)
   useEffect(() => {
@@ -430,7 +442,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   }
 
   return (
-    <div className="h-full w-full p-2 relative">
+    <div className="h-full w-full p-2 relative" onContextMenu={handleContextMenu}>
       <div ref={containerRef} className="h-full w-full" />
       {showScrollButton && (
         <button
