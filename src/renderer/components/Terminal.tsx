@@ -87,6 +87,22 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     }
   }, [flushUpdate])
 
+  const handleContextMenu = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault()
+    const hasSelection = terminalRef.current?.hasSelection() ?? false
+    const result = await window.menu.popup([
+      { id: 'copy', label: 'Copy', enabled: hasSelection },
+      { id: 'paste', label: 'Paste' },
+    ])
+    if (result === 'copy' && terminalRef.current) {
+      const text = terminalRef.current.getSelection()
+      if (text) navigator.clipboard.writeText(text)
+    } else if (result === 'paste' && ptyIdRef.current) {
+      const text = await navigator.clipboard.readText()
+      if (text) window.pty.write(ptyIdRef.current, text)
+    }
+  }, [])
+
   const handleScrollToBottom = useCallback(() => {
     terminalRef.current?.scrollToBottom()
     isFollowingRef.current = true
@@ -410,12 +426,13 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     }
   }, [sessionId, restartKey]) // Recreate terminal when session identity changes or on restart
 
-  // Fit when terminal becomes visible (e.g., tab switch)
+  // Fit and focus when terminal becomes visible (e.g., tab switch or session selection)
   useEffect(() => {
     lastInteractionRef.current = Date.now()
-    if (isActive && fitAddonRef.current) {
+    if (isActive) {
       requestAnimationFrame(() => {
         try { fitAddonRef.current?.fit() } catch { /* ignore */ }
+        terminalRef.current?.focus()
       })
     }
   }, [isActive])

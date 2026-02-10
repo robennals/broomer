@@ -664,6 +664,20 @@ ipcMain.handle('git:unstage', async (_event, repoPath: string, filePath: string)
   }
 })
 
+ipcMain.handle('git:checkoutFile', async (_event, repoPath: string, filePath: string) => {
+  if (isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    await git.checkout(['--', filePath])
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
 ipcMain.handle('git:commit', async (_event, repoPath: string, message: string) => {
   if (isE2ETest) {
     return { success: true }
@@ -1446,12 +1460,11 @@ ipcMain.handle('git:isMergedInto', async (_event, repoPath: string, ref: string)
         return true
       }
       const fileList = changedFiles.split('\n')
-      // Check if origin/ref has the same content for all files changed on this branch
-      const diffOutput = await git.raw(['diff', '--quiet', `origin/${ref}`, 'HEAD', '--', ...fileList])
-      // diff --quiet exits 0 (no output) when files match
-      return true
+      // Check if origin/ref has the same content for all files changed on this branch.
+      // Use --name-only instead of --quiet because simple-git doesn't throw on exit code 1.
+      const diffOutput = (await git.raw(['diff', '--name-only', `origin/${ref}`, 'HEAD', '--', ...fileList])).trim()
+      return diffOutput.length === 0
     } catch {
-      // diff --quiet exits non-zero when files differ, which simple-git throws as error
       return false
     }
   } catch {
