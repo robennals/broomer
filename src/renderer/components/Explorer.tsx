@@ -99,7 +99,7 @@ function BranchStatusCard({ status }: { status: BranchStatus }) {
     pushed: {
       label: 'PUSHED',
       chipClasses: 'bg-blue-500/20 text-blue-400',
-      description: 'Changes pushed to remote. Consider creating a PR.',
+      description: 'Changes pushed to remote.',
     },
     empty: {
       label: 'EMPTY',
@@ -1050,38 +1050,6 @@ export default function Explorer({
               Branch merged to {branchBaseName}
             </span>
           </div>
-        ) : syncStatus?.current && syncStatus.current !== branchBaseName ? (
-          <div className="flex flex-col gap-2">
-            <div className="text-xs text-text-secondary">
-              No PR for this branch
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={handleCreatePr}
-                className="px-2 py-1 text-xs rounded bg-accent text-white hover:bg-accent/80"
-              >
-                Create PR
-              </button>
-              {(hasWriteAccess || currentRepo?.allowPushToMain) && (
-                <button
-                  onClick={handlePushToMain}
-                  disabled={isPushingToMain}
-                  className="px-2 py-1 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
-                >
-                  {isPushingToMain ? 'Pushing...' : `Push to ${branchBaseName}`}
-                </button>
-              )}
-              {gitStatus.length === 0 && (
-                <button
-                  onClick={handleSyncWithMain}
-                  disabled={isSyncingWithMain}
-                  className="px-2 py-1 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
-                >
-                  {isSyncingWithMain ? 'Syncing...' : `Sync with ${branchBaseName}`}
-                </button>
-              )}
-            </div>
-          </div>
         ) : null}
       </div>
     )
@@ -1355,7 +1323,25 @@ export default function Explorer({
               <div className="text-sm text-text-secondary">Up to date</div>
             )}
 
-            {syncStatus?.tracking && branchStatus !== 'merged' && (
+            {branchStatus === 'pushed' ? (
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  onClick={handleCreatePr}
+                  className="px-4 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80"
+                >
+                  Create PR
+                </button>
+                {(hasWriteAccess || currentRepo?.allowPushToMain) && (
+                  <button
+                    onClick={handlePushToMain}
+                    disabled={isPushingToMain}
+                    className="px-4 py-1.5 text-xs rounded bg-bg-tertiary text-text-secondary hover:bg-bg-secondary disabled:opacity-50"
+                  >
+                    {isPushingToMain ? 'Pushing...' : `Push to ${branchBaseName}`}
+                  </button>
+                )}
+              </div>
+            ) : syncStatus?.tracking && branchStatus !== 'merged' && (
               <button
                 onClick={handleSync}
                 disabled={isSyncing}
