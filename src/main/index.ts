@@ -4,6 +4,7 @@ import { homedir, tmpdir } from 'os'
 import { statusFromChar, buildPrCreateUrl } from './gitStatusParser'
 import { getCloneErrorHint } from './cloneErrorHint'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, FSWatcher, appendFileSync, copyFileSync, rmSync } from 'fs'
+import { readFile, writeFile, mkdir } from 'fs/promises'
 import * as pty from 'node-pty'
 import simpleGit from 'simple-git'
 import { exec, execSync } from 'child_process'
@@ -477,13 +478,13 @@ ipcMain.handle('config:save', async (_event, config: { profileId?: string; agent
 
   try {
     if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true })
+      await mkdir(configDir, { recursive: true })
     }
     // Read existing config to preserve fields we don't explicitly set
     let existingConfig: Record<string, unknown> = {}
     if (existsSync(configFile)) {
       try {
-        existingConfig = JSON.parse(readFileSync(configFile, 'utf-8'))
+        existingConfig = JSON.parse(await readFile(configFile, 'utf-8'))
       } catch {
         // ignore
       }
@@ -499,7 +500,7 @@ ipcMain.handle('config:save', async (_event, config: { profileId?: string; agent
     if (config.showSidebar !== undefined) configToSave.showSidebar = config.showSidebar
     if (config.sidebarWidth !== undefined) configToSave.sidebarWidth = config.sidebarWidth
     if (config.toolbarPanels !== undefined) configToSave.toolbarPanels = config.toolbarPanels
-    writeFileSync(configFile, JSON.stringify(configToSave, null, 2))
+    await writeFile(configFile, JSON.stringify(configToSave, null, 2))
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
