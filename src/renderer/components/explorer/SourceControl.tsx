@@ -778,7 +778,7 @@ export function SourceControl({
           ) : branchStatus && branchStatus !== 'in-progress' ? (
             <>
               <BranchStatusCard status={branchStatus} />
-              {branchStatus === 'open' && onOpenReview && (
+              {(branchStatus === 'open' || branchStatus === 'pushed') && onOpenReview && (
                 <button
                   onClick={onOpenReview}
                   className="px-4 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"

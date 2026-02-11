@@ -311,9 +311,9 @@ function AppContent() {
             setPanelVisibility(activeSessionId, PANEL_IDS.REVIEW, true)
             const { toolbarPanels } = useSessionStore.getState()
             if (!toolbarPanels.includes(PANEL_IDS.REVIEW)) {
-              const settingsIdx = toolbarPanels.indexOf(PANEL_IDS.SETTINGS)
+              const explorerIdx = toolbarPanels.indexOf(PANEL_IDS.EXPLORER)
               const updated = [...toolbarPanels]
-              if (settingsIdx >= 0) updated.splice(settingsIdx, 0, PANEL_IDS.REVIEW)
+              if (explorerIdx >= 0) updated.splice(explorerIdx + 1, 0, PANEL_IDS.REVIEW)
               else updated.push(PANEL_IDS.REVIEW)
               setToolbarPanels(updated)
             }

@@ -290,7 +290,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         isLoading: false,
         showSidebar: config.showSidebar ?? true,
         sidebarWidth: config.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
-        toolbarPanels: config.toolbarPanels ?? [...DEFAULT_TOOLBAR_PANELS],
+        toolbarPanels: migrateToolbarPanels(config.toolbarPanels),
         globalPanelVisibility,
       })
     } catch {
