@@ -670,6 +670,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
             { path: 'package.json', status: 'modified' },
           ],
           baseBranch: 'main',
+          mergeBase: 'abc1234',
         }
       }
       return {
@@ -678,6 +679,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
           { path: 'src/new-feature.ts', status: 'added' },
         ],
         baseBranch: 'main',
+        mergeBase: 'abc1234',
       }
     }
 
@@ -726,9 +728,11 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
         }
       }
 
-      return { files, baseBranch }
+      const mergeBase = (await git.raw(['merge-base', `origin/${baseBranch}`, 'HEAD'])).trim()
+
+      return { files, baseBranch, mergeBase }
     } catch {
-      return { files: [], baseBranch: baseBranch || 'main' }
+      return { files: [], baseBranch: baseBranch || 'main', mergeBase: '' }
     }
   })
 

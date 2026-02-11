@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAgentStore, type AgentConfig } from '../store/agents'
 import { useRepoStore } from '../store/repos'
-import { EnvVarEditor } from './EnvVarEditor'
+import type { ManagedRepo } from '../../preload/index'
+import { EnvVarEditor, type EnvVarEditorRef } from './EnvVarEditor'
 import { RepoSettingsEditor } from './RepoSettingsEditor'
 
 interface AgentSettingsProps {
@@ -10,7 +11,7 @@ interface AgentSettingsProps {
 
 export default function AgentSettings({ onClose }: AgentSettingsProps) {
   const { agents, addAgent, updateAgent, removeAgent } = useAgentStore()
-  const { repos, loadRepos, updateRepo } = useRepoStore()
+  const { repos, loadRepos, updateRepo, defaultCloneDir, setDefaultCloneDir } = useRepoStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -25,6 +26,7 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
   const [command, setCommand] = useState('')
   const [color, setColor] = useState('')
   const [env, setEnv] = useState<Record<string, string>>({})
+  const envEditorRef = useRef<EnvVarEditorRef>(null)
 
   const resetForm = () => {
     setName('')
@@ -38,11 +40,12 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
   const handleAdd = async () => {
     if (!name.trim() || !command.trim()) return
 
+    const finalEnv = envEditorRef.current?.getPendingEnv() ?? env
     await addAgent({
       name: name.trim(),
       command: command.trim(),
       color: color.trim() || undefined,
-      env: Object.keys(env).length > 0 ? env : undefined,
+      env: Object.keys(finalEnv).length > 0 ? finalEnv : undefined,
     })
     resetForm()
   }
@@ -60,11 +63,12 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
   const handleUpdate = async () => {
     if (!editingId || !name.trim() || !command.trim()) return
 
+    const finalEnv = envEditorRef.current?.getPendingEnv() ?? env
     await updateAgent(editingId, {
       name: name.trim(),
       command: command.trim(),
       color: color.trim() || undefined,
-      env: Object.keys(env).length > 0 ? env : undefined,
+      env: Object.keys(finalEnv).length > 0 ? finalEnv : undefined,
     })
     resetForm()
   }
@@ -105,8 +109,30 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
+        {/* General section */}
+        <h3 className="text-sm font-medium text-text-primary mb-3">General</h3>
+        <div className="space-y-2 mb-4">
+          <label className="text-xs text-text-secondary">Default Repo Folder</label>
+          <div className="flex gap-2">
+            <div className="flex-1 px-3 py-2 text-sm rounded border border-border bg-bg-primary text-text-primary font-mono truncate">
+              {defaultCloneDir || '~/repos'}
+            </div>
+            <button
+              onClick={async () => {
+                const folder = await window.dialog.openFolder()
+                if (folder) await setDefaultCloneDir(folder)
+              }}
+              className="px-3 py-2 text-sm rounded border border-border bg-bg-primary hover:bg-bg-tertiary text-text-secondary transition-colors"
+            >
+              Browse
+            </button>
+          </div>
+        </div>
+
         {/* Agents section */}
-        <h3 className="text-sm font-medium text-text-primary mb-3">Agents</h3>
+        <div className="mt-8 mb-4 border-t border-border pt-4">
+          <h3 className="text-sm font-medium text-text-primary mb-3">Agents</h3>
+        </div>
         <div className="space-y-2 mb-4">
           {agents.map((agent) => (
             <div
@@ -140,7 +166,7 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
                     placeholder="Color (optional, e.g., #4a9eff)"
                     className="w-full px-3 py-2 bg-bg-secondary border border-border rounded text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
                   />
-                  <EnvVarEditor env={env} onChange={setEnv} command={command} />
+                  <EnvVarEditor ref={envEditorRef} env={env} onChange={setEnv} command={command} />
                   <div className="flex gap-2">
                     <button
                       onClick={handleUpdate}
@@ -257,7 +283,7 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
               placeholder="Color (optional, e.g., #4a9eff)"
               className="w-full px-3 py-2 bg-bg-secondary border border-border rounded text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
             />
-            <EnvVarEditor env={env} onChange={setEnv} command={command} />
+            <EnvVarEditor ref={envEditorRef} env={env} onChange={setEnv} command={command} />
             <div className="flex gap-2">
               <button
                 onClick={handleAdd}

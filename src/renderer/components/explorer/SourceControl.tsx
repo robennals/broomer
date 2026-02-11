@@ -48,6 +48,7 @@ export function SourceControl({
   const [scView, setScView] = useState<'working' | 'branch' | 'commits' | 'comments'>('working')
   const [branchChanges, setBranchChanges] = useState<{ path: string; status: string }[]>([])
   const [branchBaseName, setBranchBaseName] = useState<string>('main')
+  const [branchMergeBase, setBranchMergeBase] = useState<string>('')
   const [isBranchLoading, setIsBranchLoading] = useState(false)
 
   // Commits state
@@ -109,10 +110,12 @@ export function SourceControl({
       if (cancelled) return
       setBranchChanges(result.files)
       setBranchBaseName(result.baseBranch)
+      setBranchMergeBase(result.mergeBase)
       setIsBranchLoading(false)
     }).catch(() => {
       if (cancelled) return
       setBranchChanges([])
+      setBranchMergeBase('')
       setIsBranchLoading(false)
     })
 
@@ -718,7 +721,7 @@ export function SourceControl({
                 title={`${file.path} — ${statusLabel(file.status)}`}
                 onClick={() => {
                   if (onFileSelect && directory) {
-                    onFileSelect(`${directory}/${file.path}`, true, undefined, undefined, `origin/${branchBaseName}`, undefined, `Branch vs ${branchBaseName}`)
+                    onFileSelect(`${directory}/${file.path}`, true, undefined, undefined, branchMergeBase || `origin/${branchBaseName}`, undefined, `Branch vs ${branchBaseName}`)
                   }
                 }}
               >

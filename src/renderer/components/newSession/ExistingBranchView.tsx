@@ -20,6 +20,7 @@ export function ExistingBranchView({
   const [error, setError] = useState<string | null>(null)
   const [selectedBranch, setSelectedBranch] = useState<BranchInfo | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(repo.defaultAgentId || agents[0]?.id || null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     const fetchBranches = async () => {
@@ -76,11 +77,11 @@ export function ExistingBranchView({
           })
         }
 
-        // Sort: worktrees first, then by name
+        // Sort: worktrees first, then preserve time order
         branchInfos.sort((a, b) => {
           if (a.hasWorktree && !b.hasWorktree) return -1
           if (!a.hasWorktree && b.hasWorktree) return 1
-          return a.name.localeCompare(b.name)
+          return 0
         })
 
         setBranches(branchInfos)
@@ -135,6 +136,10 @@ export function ExistingBranchView({
       setCreating(false)
     }
   }
+
+  const filteredBranches = searchQuery.trim()
+    ? branches.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : branches
 
   // If we've selected a branch that needs a worktree, show confirmation
   if (selectedBranch && !selectedBranch.hasWorktree) {
@@ -217,6 +222,28 @@ export function ExistingBranchView({
       </div>
 
       <div className="p-4">
+        {/* Search */}
+        {!loading && branches.length > 0 && (
+          <div className="mb-3 relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search branches..."
+              className="w-full px-3 py-2 text-sm rounded border border-border bg-bg-primary text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent"
+              autoFocus
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary text-xs"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+        )}
+
         {loading && (
           <div className="flex items-center justify-center py-8 text-text-secondary text-sm">
             <svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
@@ -237,9 +264,15 @@ export function ExistingBranchView({
           </div>
         )}
 
-        {!loading && !error && branches.length > 0 && (
+        {!loading && !error && branches.length > 0 && filteredBranches.length === 0 && (
+          <div className="text-center text-text-secondary text-sm py-4">
+            No branches matching "{searchQuery}"
+          </div>
+        )}
+
+        {!loading && !error && filteredBranches.length > 0 && (
           <div className="space-y-1 max-h-80 overflow-y-auto">
-            {branches.map((branch) => (
+            {filteredBranches.map((branch) => (
               <button
                 key={branch.name}
                 onClick={() => handleOpen(branch)}

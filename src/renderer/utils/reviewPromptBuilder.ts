@@ -71,7 +71,7 @@ You are reviewing a pull request. Analyze the diff and produce a structured revi
 
 ## Instructions
 
-1. Run \`git diff ${baseBranch}...HEAD\` to see the full diff
+1. Run \`git diff origin/${baseBranch}...HEAD\` to see the full diff
 2. Run \`git rev-parse HEAD\` to get the current commit SHA (for the headCommit field)
 3. Examine the changed files to understand the context
 4. Produce a structured JSON review and write it to \`.broomy/review.json\`

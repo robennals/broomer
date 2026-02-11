@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useImperativeHandle, forwardRef } from 'react'
 
 // Suggested env vars for different commands
 const ENV_SUGGESTIONS: Record<string, { key: string; description: string }[]> = {
@@ -7,17 +7,29 @@ const ENV_SUGGESTIONS: Record<string, { key: string; description: string }[]> = 
   ],
 }
 
-export function EnvVarEditor({
-  env,
-  onChange,
-  command,
-}: {
-  env: Record<string, string>
-  onChange: (env: Record<string, string>) => void
-  command: string
-}) {
+export interface EnvVarEditorRef {
+  getPendingEnv: () => Record<string, string>
+}
+
+export const EnvVarEditor = forwardRef<
+  EnvVarEditorRef,
+  {
+    env: Record<string, string>
+    onChange: (env: Record<string, string>) => void
+    command: string
+  }
+>(function EnvVarEditor({ env, onChange, command }, ref) {
   const [newKey, setNewKey] = useState('')
   const [newValue, setNewValue] = useState('')
+
+  useImperativeHandle(ref, () => ({
+    getPendingEnv: () => {
+      if (newKey.trim()) {
+        return { ...env, [newKey.trim()]: newValue }
+      }
+      return env
+    },
+  }))
 
   const entries = Object.entries(env)
   const suggestions = ENV_SUGGESTIONS[command] || []
@@ -118,4 +130,4 @@ export function EnvVarEditor({
       )}
     </div>
   )
-}
+})
