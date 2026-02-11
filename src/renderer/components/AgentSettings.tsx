@@ -261,7 +261,7 @@ function RepoSettingsEditor({
 
 export default function AgentSettings({ onClose }: AgentSettingsProps) {
   const { agents, addAgent, updateAgent, removeAgent } = useAgentStore()
-  const { repos, loadRepos, updateRepo } = useRepoStore()
+  const { repos, loadRepos, updateRepo, defaultCloneDir, setDefaultCloneDir } = useRepoStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingRepoId, setEditingRepoId] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -356,8 +356,30 @@ export default function AgentSettings({ onClose }: AgentSettingsProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
+        {/* General section */}
+        <h3 className="text-sm font-medium text-text-primary mb-3">General</h3>
+        <div className="space-y-2 mb-4">
+          <label className="text-xs text-text-secondary">Default Repo Folder</label>
+          <div className="flex gap-2">
+            <div className="flex-1 px-3 py-2 text-sm rounded border border-border bg-bg-primary text-text-primary font-mono truncate">
+              {defaultCloneDir || '~/repos'}
+            </div>
+            <button
+              onClick={async () => {
+                const folder = await window.dialog.openFolder()
+                if (folder) await setDefaultCloneDir(folder)
+              }}
+              className="px-3 py-2 text-sm rounded border border-border bg-bg-primary hover:bg-bg-tertiary text-text-secondary transition-colors"
+            >
+              Browse
+            </button>
+          </div>
+        </div>
+
         {/* Agents section */}
-        <h3 className="text-sm font-medium text-text-primary mb-3">Agents</h3>
+        <div className="mt-8 mb-4 border-t border-border pt-4">
+          <h3 className="text-sm font-medium text-text-primary mb-3">Agents</h3>
+        </div>
         <div className="space-y-2 mb-4">
           {agents.map((agent) => (
             <div
