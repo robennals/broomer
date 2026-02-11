@@ -40,6 +40,7 @@ interface ExplorerProps {
   onUpdatePrState?: (prState: PrState, prNumber?: number, prUrl?: string) => void
   repoId?: string
   agentPtyId?: string
+  onOpenReview?: () => void
 }
 
 interface TreeNode extends FileEntry {
@@ -156,6 +157,7 @@ export default function Explorer({
   onUpdatePrState,
   repoId,
   agentPtyId,
+  onOpenReview,
 }: ExplorerProps) {
   const [tree, setTree] = useState<TreeNode[]>([])
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -1321,7 +1323,17 @@ export default function Explorer({
                 )}
               </div>
             ) : branchStatus && branchStatus !== 'in-progress' ? (
-              <BranchStatusCard status={branchStatus} />
+              <>
+                <BranchStatusCard status={branchStatus} />
+                {branchStatus === 'open' && onOpenReview && (
+                  <button
+                    onClick={onOpenReview}
+                    className="px-4 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+                  >
+                    Get AI Review
+                  </button>
+                )}
+              </>
             ) : (
               <div className="text-sm text-text-secondary">Up to date</div>
             )}
@@ -1334,6 +1346,14 @@ export default function Explorer({
                 >
                   Create PR
                 </button>
+                {onOpenReview && (
+                  <button
+                    onClick={onOpenReview}
+                    className="px-4 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+                  >
+                    Get AI Review
+                  </button>
+                )}
                 {(hasWriteAccess || currentRepo?.allowPushToMain) && (
                   <button
                     onClick={handlePushToMain}
