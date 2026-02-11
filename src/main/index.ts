@@ -1603,6 +1603,7 @@ ipcMain.handle('git:branchChanges', async (_event, repoPath: string, baseBranch?
           { path: 'package.json', status: 'modified' },
         ],
         baseBranch: 'main',
+        mergeBase: 'abc1234',
       }
     }
     return {
@@ -1611,6 +1612,7 @@ ipcMain.handle('git:branchChanges', async (_event, repoPath: string, baseBranch?
         { path: 'src/new-feature.ts', status: 'added' },
       ],
       baseBranch: 'main',
+      mergeBase: 'abc1234',
     }
   }
 
@@ -1637,7 +1639,11 @@ ipcMain.handle('git:branchChanges', async (_event, repoPath: string, baseBranch?
       }
     }
 
-    // Get all changed files on this branch vs base
+    // Compute the merge-base between origin/baseBranch and HEAD
+    // This is the correct reference point for PR diffs (matches what GitHub shows)
+    const mergeBase = (await git.raw(['merge-base', `origin/${baseBranch}`, 'HEAD'])).trim()
+
+    // Get all changed files on this branch vs base (using merge-base via three-dot syntax)
     const diffOutput = await git.raw(['diff', '--name-status', `origin/${baseBranch}...HEAD`])
 
     const files: { path: string; status: string }[] = []
@@ -1661,9 +1667,9 @@ ipcMain.handle('git:branchChanges', async (_event, repoPath: string, baseBranch?
       }
     }
 
-    return { files, baseBranch }
+    return { files, baseBranch, mergeBase }
   } catch {
-    return { files: [], baseBranch: baseBranch || 'main' }
+    return { files: [], baseBranch: baseBranch || 'main', mergeBase: '' }
   }
 })
 

@@ -159,6 +159,7 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
   const [error, setError] = useState<string | null>(null)
   const [showGitignoreModal, setShowGitignoreModal] = useState(false)
   const [pendingGenerate, setPendingGenerate] = useState(false)
+  const [mergeBase, setMergeBase] = useState<string>('')
 
   // All files live in .broomy folder in the repo
   const broomyDir = `${session.directory}/.broomy`
@@ -177,8 +178,20 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
       setWaitingForAgent(false)
       setError(null)
       setPushResult(null)
+      setMergeBase('')
     }
   }, [session.id])
+
+  // Compute merge-base for correct PR diffs
+  useEffect(() => {
+    if (!session.directory) return
+    const baseBranch = session.prBaseBranch || undefined
+    window.git.branchChanges(session.directory, baseBranch).then((result) => {
+      setMergeBase(result.mergeBase)
+    }).catch(() => {
+      setMergeBase('')
+    })
+  }, [session.directory, session.prBaseBranch])
 
   // Load review data and comments from .broomy folder on mount and session change
   useEffect(() => {
@@ -476,9 +489,10 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
     const fullPath = location.file.startsWith('/')
       ? location.file
       : `${session.directory}/${location.file}`
-    const baseBranch = session.prBaseBranch || 'main'
-    onSelectFile(fullPath, true, location.startLine, baseBranch)
-  }, [session.directory, session.prBaseBranch, onSelectFile])
+    // Use merge-base SHA for correct PR diffs (matches what GitHub shows)
+    const diffRef = mergeBase || `origin/${session.prBaseBranch || 'main'}`
+    onSelectFile(fullPath, true, location.startLine, diffRef)
+  }, [session.directory, session.prBaseBranch, mergeBase, onSelectFile])
 
   const unpushedCount = comments.filter(c => !c.pushed).length
 
@@ -815,7 +829,7 @@ You are reviewing a pull request. Analyze the diff and produce a structured revi
 
 ## Instructions
 
-1. Run \`git diff ${baseBranch}...HEAD\` to see the full diff
+1. Run \`git diff origin/${baseBranch}...HEAD\` to see the full diff
 2. Run \`git rev-parse HEAD\` to get the current commit SHA (for the headCommit field)
 3. Examine the changed files to understand the context
 4. Produce a structured JSON review and write it to \`.broomy/review.json\`
