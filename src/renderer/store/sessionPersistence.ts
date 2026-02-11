@@ -12,6 +12,18 @@ export function getCurrentProfileId(): string | undefined {
   return currentProfileId
 }
 
+// Track how many sessions were loaded from disk.
+// Used by the save guard to prevent accidentally persisting an empty array.
+let loadedSessionCount = 0
+
+export function setLoadedSessionCount(count: number) {
+  loadedSessionCount = count
+}
+
+export function getLoadedSessionCount(): number {
+  return loadedSessionCount
+}
+
 // Helper to sync legacy fields from panelVisibility
 export function syncLegacyFields(session: Session): Session {
   return {
@@ -54,6 +66,16 @@ export const debouncedSave = async (
 ) => {
   if (saveTimeout) clearTimeout(saveTimeout)
   saveTimeout = setTimeout(async () => {
+    // Save guard: refuse to persist an empty sessions array when we previously
+    // loaded real sessions. This prevents bugs (e.g. a failed loadSessions)
+    // from accidentally wiping all persisted session data.
+    if (sessions.length === 0 && loadedSessionCount > 0) {
+      console.warn(
+        `[sessionPersistence] Save guard: refusing to save empty sessions array ` +
+        `(${loadedSessionCount} sessions were loaded from disk)`
+      )
+      return
+    }
     const config = await window.config.load(currentProfileId)
     await window.config.save({
       profileId: currentProfileId,

@@ -8,6 +8,7 @@ import {
   createPanelVisibilityFromLegacy,
   setCurrentProfileId,
   getCurrentProfileId,
+  setLoadedSessionCount,
 } from './sessionPersistence'
 import { createTerminalTabActions } from './sessionTerminalTabs'
 
@@ -198,6 +199,25 @@ interface SessionStore {
   unarchiveSession: (sessionId: string) => void
 }
 
+// Ensure saved toolbar panels include all known panels (e.g. 'review' added later).
+// Returns DEFAULT_TOOLBAR_PANELS if no saved value, otherwise adds missing panels.
+function migrateToolbarPanels(saved: string[] | undefined): string[] {
+  if (!saved || saved.length === 0) return [...DEFAULT_TOOLBAR_PANELS]
+  const missing = DEFAULT_TOOLBAR_PANELS.filter((p) => !saved.includes(p))
+  if (missing.length === 0) return saved
+  // Insert missing panels before settings (last item) to keep settings at the end
+  const result = [...saved]
+  const settingsIdx = result.indexOf(PANEL_IDS.SETTINGS)
+  for (const p of missing) {
+    if (settingsIdx >= 0) {
+      result.splice(settingsIdx, 0, p)
+    } else {
+      result.push(p)
+    }
+  }
+  return result
+}
+
 const generateId = () => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
 export const useSessionStore = create<SessionStore>((set, get) => {
@@ -222,7 +242,19 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       const sessions: Session[] = []
 
       for (const sessionData of config.sessions) {
-        const branch = await window.git.getBranch(sessionData.directory)
+        // Per-session try-catch: a single session's git failure must not
+        // prevent other sessions from loading. Branch is transient data
+        // refreshed on load; core session identity comes from the config.
+        let branch: string
+        try {
+          branch = await window.git.getBranch(sessionData.directory)
+        } catch {
+          console.warn(
+            `[sessions] Failed to get branch for session "${sessionData.name}" ` +
+            `(${sessionData.directory}), using "unknown"`
+          )
+          branch = 'unknown'
+        }
         const panelVisibility = createPanelVisibilityFromLegacy(sessionData)
 
         const session: Session = {
@@ -284,6 +316,8 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         [PANEL_IDS.SETTINGS]: false,
       }
 
+      setLoadedSessionCount(sessions.length)
+
       set({
         sessions,
         activeSessionId: (sessions.find((s) => !s.isArchived) ?? sessions[0])?.id ?? null,
@@ -293,7 +327,11 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         toolbarPanels: migrateToolbarPanels(config.toolbarPanels),
         globalPanelVisibility,
       })
-    } catch {
+    } catch (err) {
+      // Config load failed entirely. Set empty UI state but do NOT update
+      // loadedSessionCount — the save guard will prevent debouncedSave from
+      // persisting this empty state over real data on disk.
+      console.warn('[sessions] Failed to load sessions config:', err)
       set({ sessions: [], activeSessionId: null, isLoading: false })
     }
   },
