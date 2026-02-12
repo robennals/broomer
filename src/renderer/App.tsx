@@ -195,6 +195,27 @@ function AppContent() {
     }
   }
 
+  const handleDeleteSession = useCallback(async (id: string, deleteWorktree: boolean) => {
+    if (deleteWorktree) {
+      const session = sessions.find(s => s.id === id)
+      if (session?.repoId) {
+        const repo = repos.find(r => r.id === session.repoId)
+        if (repo) {
+          const mainDir = `${repo.rootDir}/${repo.defaultBranch}`
+          const removeResult = await window.git.worktreeRemove(mainDir, session.directory)
+          if (!removeResult.success) {
+            addError(`Failed to remove worktree: ${removeResult.error}`)
+          }
+          const branchResult = await window.git.deleteBranch(mainDir, session.branch)
+          if (!branchResult.success) {
+            addError(`Failed to delete branch: ${branchResult.error}`)
+          }
+        }
+      }
+    }
+    removeSession(id)
+  }, [sessions, repos, removeSession, addError])
+
   const handleSelectSession = useCallback((id: string) => {
     setActiveSession(id)
     // After React re-renders with the new session, focus the agent terminal panel
@@ -273,9 +294,10 @@ function AppContent() {
       <SessionList
         sessions={sessions}
         activeSessionId={activeSessionId}
+        repos={repos}
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
-        onDeleteSession={removeSession}
+        onDeleteSession={handleDeleteSession}
         onRefreshPrStatus={refreshPrStatus}
         onArchiveSession={archiveSession}
         onUnarchiveSession={unarchiveSession}
