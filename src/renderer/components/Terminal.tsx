@@ -5,8 +5,9 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { useErrorStore } from '../store/errors'
 import { useSessionStore } from '../store/sessions'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
-import { stripAnsi } from '../utils/stripAnsi'
 import { evaluateActivity } from '../utils/terminalActivityDetector'
+import { useTerminalKeyboard } from '../hooks/useTerminalKeyboard'
+import { usePlanDetection } from '../hooks/usePlanDetection'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
@@ -56,12 +57,11 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const setPlanFileRef = useRef(setPlanFile)
   setPlanFileRef.current = setPlanFile
 
-  // Rolling buffer for plan file detection (agent terminals only)
-  const planDetectionBufferRef = useRef('')
-  const lastDetectedPlanRef = useRef<string | null>(null)
-
   const sessionIdRef = useRef(sessionId)
   sessionIdRef.current = sessionId
+
+  const handleKeyEvent = useTerminalKeyboard(ptyIdRef)
+  const processPlanDetection = usePlanDetection(sessionIdRef, setPlanFileRef)
 
   const pendingUpdateRef = useRef<{ status?: 'working' | 'idle' | 'error'; lastMessage?: string } | null>(null)
 
@@ -189,6 +189,56 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     // Pending rAF id for scroll-to-bottom retry (lets us cancel on user scroll)
     let pendingScrollRAF = 0
 
+    // Cache the xterm viewport element for cheap desync checks
+    const viewportEl = containerRef.current!.querySelector('.xterm-viewport') as HTMLElement | null
+
+    // Force xterm to recalculate the viewport scroll area.
+    // Works around an xterm.js issue where the DOM scroll area height gets
+    // out of sync with the buffer, making scrollback unreachable.
+    // We toggle terminal.resize() by ±1 row to force syncScrollArea() —
+    // the intermediate state is never painted because the browser batches
+    // DOM updates within a single JS turn.
+    const forceViewportSync = () => {
+      const { cols, rows } = terminal
+      if (cols > 0 && rows > 1) {
+        terminal.resize(cols, rows + 1)
+        terminal.resize(cols, rows)
+      }
+    }
+
+    // Check if the viewport scroll area is desynced from the buffer.
+    // Returns true if buffer has scrollback content but the DOM viewport
+    // isn't scrollable (scrollHeight ≈ clientHeight).
+    const isViewportDesynced = () => {
+      if (!viewportEl) return false
+      return terminal.buffer.active.baseY > 0 &&
+        viewportEl.scrollHeight <= viewportEl.clientHeight + 1
+    }
+
+    // Check if we can scroll further in the given direction but DOM won't move.
+    // direction: 1 = down, -1 = up
+    const isScrollStuck = (direction: 1 | -1): boolean => {
+      if (!viewportEl) return false
+      const buffer = terminal.buffer.active
+      if (direction === 1) {
+        // Trying to scroll down: stuck if not at buffer bottom but DOM is at scroll bottom
+        const notAtBufferBottom = buffer.viewportY < buffer.baseY
+        const domAtBottom = viewportEl.scrollTop >= viewportEl.scrollHeight - viewportEl.clientHeight - 1
+        return notAtBufferBottom && domAtBottom
+      } else {
+        // Trying to scroll up: stuck if not at buffer top but DOM is at scroll top
+        const notAtBufferTop = buffer.viewportY > 0
+        const domAtTop = viewportEl.scrollTop <= 1
+        return notAtBufferTop && domAtTop
+      }
+    }
+
+    // Debounce timer for proactive viewport sync checks after data writes
+    let syncCheckTimeout: ReturnType<typeof setTimeout> | null = null
+    // Track consecutive stuck scroll attempts to avoid over-syncing
+    let stuckScrollCount = 0
+    let lastStuckSyncTime = 0
+
     // Update the scroll button visibility on render frames.
     // NOTE: We intentionally do NOT auto-correct scroll position here.
     // The write callback handles scrolling, and onRender just updates the UI.
@@ -215,6 +265,46 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
           cancelAnimationFrame(pendingScrollRAF)
           pendingScrollRAF = 0
         }
+      }
+
+      // Unified stuck scroll detection for both directions.
+      // We no longer preemptively call forceViewportSync() on upward scroll
+      // because that resize can itself cause position jumps. Instead, we
+      // only force sync if the scroll actually doesn't move when it should.
+      if (e instanceof WheelEvent) {
+        const direction = e.deltaY > 0 ? 1 : -1
+        const scrollTopBefore = viewportEl?.scrollTop ?? 0
+        const viewportYBefore = terminal.buffer.active.viewportY
+
+        // Use rAF to check after the scroll event has been processed
+        requestAnimationFrame(() => {
+          const scrollTopAfter = viewportEl?.scrollTop ?? 0
+          const viewportYAfter = terminal.buffer.active.viewportY
+          const scrollMoved = Math.abs(scrollTopAfter - scrollTopBefore) > 0.5
+          const bufferMoved = viewportYAfter !== viewportYBefore
+
+          // If neither DOM scroll nor buffer position moved, but we should
+          // be able to scroll further, we're stuck and need to resync
+          if (!scrollMoved && !bufferMoved && isScrollStuck(direction as 1 | -1)) {
+            const now = Date.now()
+            stuckScrollCount++
+
+            // Force sync after 2 stuck attempts, with 500ms cooldown
+            if (stuckScrollCount >= 2 && now - lastStuckSyncTime > 500) {
+              forceViewportSync()
+              lastStuckSyncTime = now
+              stuckScrollCount = 0
+            }
+          } else if (scrollMoved || bufferMoved) {
+            // Reset stuck counter on successful scroll
+            stuckScrollCount = 0
+          }
+
+          const atBottom = isAtBottom()
+          isFollowingRef.current = atBottom
+          setShowScrollButton(!atBottom && terminal.buffer.active.baseY > 0)
+        })
+        return // Already scheduled rAF above
       }
 
       requestAnimationFrame(() => {
@@ -254,45 +344,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     })
 
     // Keyboard shortcuts
-    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'Tab') {
-        return false
-      }
-      if (e.shiftKey && e.key === 'Enter') {
-        if (e.type === 'keydown' && ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x1b[13;2u')
-        }
-        return false
-      }
-      if (e.metaKey && e.key === 'ArrowLeft') {
-        if (e.type === 'keydown' && ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x01')
-        }
-        return false
-      }
-      if (e.metaKey && e.key === 'ArrowRight') {
-        if (e.type === 'keydown' && ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x05')
-        }
-        return false
-      }
-      if (e.type !== 'keydown') return true
-      if (e.metaKey && e.key === 'Backspace') {
-        if (ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x15')
-        }
-        return false
-      }
-      if (e.metaKey || e.ctrlKey) {
-        if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
-          window.dispatchEvent(new CustomEvent('app:toggle-panel', {
-            detail: { key: e.key }
-          }))
-          return false
-        }
-      }
-      return true
-    })
+    terminal.attachCustomKeyEventHandler(handleKeyEvent)
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -336,18 +388,22 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
             }
           })
 
+          // Proactive viewport desync check — debounced so we don't
+          // do the DOM read on every single data chunk.
+          // Check both for scrollHeight desync AND for stuck scroll positions
+          // (buffer has content we can't reach via DOM scrolling).
+          if (!syncCheckTimeout) {
+            syncCheckTimeout = setTimeout(() => {
+              syncCheckTimeout = null
+              if (isViewportDesynced() || isScrollStuck(1) || isScrollStuck(-1)) {
+                forceViewportSync()
+              }
+            }, 500)
+          }
+
           // Plan file detection for agent terminals
-          if (isAgent && sessionIdRef.current) {
-            const stripped = stripAnsi(data)
-            planDetectionBufferRef.current += stripped
-            if (planDetectionBufferRef.current.length > 1000) {
-              planDetectionBufferRef.current = planDetectionBufferRef.current.slice(-1000)
-            }
-            const planMatch = planDetectionBufferRef.current.match(/\/[^\s)]+\.claude-personal\/plans\/[^\s)]+\.md/)
-            if (planMatch && planMatch[0] !== lastDetectedPlanRef.current) {
-              lastDetectedPlanRef.current = planMatch[0]
-              setPlanFileRef.current(sessionIdRef.current, planMatch[0])
-            }
+          if (isAgent) {
+            processPlanDetection(data)
           }
 
           // Activity detection for agent terminals
@@ -436,6 +492,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       scrollContainer.removeEventListener('keydown', handleKeyScroll)
       resizeObserver.disconnect()
       if (ptyResizeTimeout) clearTimeout(ptyResizeTimeout)
+      if (syncCheckTimeout) clearTimeout(syncCheckTimeout)
       if (pendingScrollRAF) cancelAnimationFrame(pendingScrollRAF)
       cleanupRef.current?.()
       if (ptyIdRef.current) {
