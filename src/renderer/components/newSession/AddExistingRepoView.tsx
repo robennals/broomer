@@ -112,12 +112,21 @@ export function AddExistingRepoView({
       const defaultBranch = await window.git.defaultBranch(mainDir)
       const remoteUrl = await window.git.remoteUrl(mainDir) || ''
 
+      // Check write access to enable push-to-main by default
+      let allowPushToMain = false
+      try {
+        allowPushToMain = await window.gh.hasWriteAccess(mainDir)
+      } catch {
+        // gh CLI not available or other error - default to false
+      }
+
       await addRepo({
         name: repoName || rootDir.split('/').pop() || 'unknown',
         remoteUrl,
         rootDir,
         defaultBranch,
         defaultAgentId: selectedAgentId || undefined,
+        allowPushToMain,
       })
 
       // Get the repo ID

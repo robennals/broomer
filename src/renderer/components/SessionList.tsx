@@ -1,3 +1,12 @@
+/**
+ * Sidebar list of sessions with status indicators, branch chips, and archive support.
+ *
+ * Renders each session as a card showing agent activity status (spinner for working,
+ * glow dot for unread idle, plain dot for read idle), the branch name, repository name,
+ * branch status chip (pushed, PR open, merged, etc.), and the last agent message preview.
+ * Sessions can be archived to collapse them into a toggleable section. Keyboard navigation
+ * with arrow keys, Enter to select, and Delete to remove is supported.
+ */
 import { useState } from 'react'
 import type { Session, SessionStatus, BranchStatus } from '../store/sessions'
 
@@ -113,9 +122,7 @@ function SessionCard({
           const prev = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement
           if (prev?.tabIndex >= 0) prev.focus()
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
-          if (window.confirm(`Close session "${session.branch}" (${session.name})?`)) {
-            onDelete(e as unknown as React.MouseEvent)
-          }
+          onDelete(e as unknown as React.MouseEvent)
         }
       }}
       className={`group relative w-full text-left p-3 rounded mb-1 transition-all cursor-pointer outline-none focus:ring-1 focus:ring-accent/50 ${
@@ -229,11 +236,11 @@ export default function SessionList({
     }
   }
 
-  const handleDelete = (e: React.MouseEvent, session: Session) => {
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<Session | null>(null)
+
+  const handleDelete = (e: React.MouseEvent | React.KeyboardEvent, session: Session) => {
     e.stopPropagation()
-    if (window.confirm(`Close session "${session.branch}" (${session.name})?`)) {
-      onDeleteSession(session.id)
-    }
+    setPendingDeleteSession(session)
   }
 
   const handleArchive = (e: React.MouseEvent, session: Session) => {
@@ -345,6 +352,35 @@ export default function SessionList({
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      {pendingDeleteSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-bg-secondary border border-border rounded-lg shadow-xl p-4 max-w-sm mx-4">
+            <h3 className="text-sm font-medium text-text-primary mb-2">Close Session</h3>
+            <p className="text-xs text-text-secondary mb-4">
+              Close session "{pendingDeleteSession.branch}" ({pendingDeleteSession.name})?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setPendingDeleteSession(null)}
+                className="px-3 py-1.5 text-xs rounded bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onDeleteSession(pendingDeleteSession.id)
+                  setPendingDeleteSession(null)
+                }}
+                className="px-3 py-1.5 text-xs rounded bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
