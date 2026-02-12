@@ -215,8 +215,29 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
         viewportEl.scrollHeight <= viewportEl.clientHeight + 1
     }
 
+    // Check if we can scroll further in the given direction but DOM won't move.
+    // direction: 1 = down, -1 = up
+    const isScrollStuck = (direction: 1 | -1): boolean => {
+      if (!viewportEl) return false
+      const buffer = terminal.buffer.active
+      if (direction === 1) {
+        // Trying to scroll down: stuck if not at buffer bottom but DOM is at scroll bottom
+        const notAtBufferBottom = buffer.viewportY < buffer.baseY
+        const domAtBottom = viewportEl.scrollTop >= viewportEl.scrollHeight - viewportEl.clientHeight - 1
+        return notAtBufferBottom && domAtBottom
+      } else {
+        // Trying to scroll up: stuck if not at buffer top but DOM is at scroll top
+        const notAtBufferTop = buffer.viewportY > 0
+        const domAtTop = viewportEl.scrollTop <= 1
+        return notAtBufferTop && domAtTop
+      }
+    }
+
     // Debounce timer for proactive viewport sync checks after data writes
     let syncCheckTimeout: ReturnType<typeof setTimeout> | null = null
+    // Track consecutive stuck scroll attempts to avoid over-syncing
+    let stuckScrollCount = 0
+    let lastStuckSyncTime = 0
 
     // Update the scroll button visibility on render frames.
     // NOTE: We intentionally do NOT auto-correct scroll position here.
@@ -249,6 +270,42 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
           cancelAnimationFrame(pendingScrollRAF)
           pendingScrollRAF = 0
         }
+      }
+
+      // Check for stuck scrolling in either direction and fix desync.
+      // This handles the case where you're at the top trying to scroll down
+      // to see new content, but the scroll won't move.
+      if (e instanceof WheelEvent) {
+        const direction = e.deltaY > 0 ? 1 : -1
+        const scrollTopBefore = viewportEl?.scrollTop ?? 0
+
+        // Use rAF to check after the scroll event has been processed
+        requestAnimationFrame(() => {
+          const scrollTopAfter = viewportEl?.scrollTop ?? 0
+          const scrollMoved = Math.abs(scrollTopAfter - scrollTopBefore) > 0.5
+
+          // If scroll didn't move but we should be able to scroll further
+          if (!scrollMoved && isScrollStuck(direction as 1 | -1)) {
+            const now = Date.now()
+            stuckScrollCount++
+
+            // Only sync if we've seen multiple stuck scrolls (avoids false positives)
+            // and haven't synced very recently (avoid sync loops)
+            if (stuckScrollCount >= 2 && now - lastStuckSyncTime > 500) {
+              forceViewportSync()
+              lastStuckSyncTime = now
+              stuckScrollCount = 0
+            }
+          } else if (scrollMoved) {
+            // Reset stuck counter on successful scroll
+            stuckScrollCount = 0
+          }
+
+          const atBottom = isAtBottom()
+          isFollowingRef.current = atBottom
+          setShowScrollButton(!atBottom && terminal.buffer.active.baseY > 0)
+        })
+        return // Already scheduled rAF above
       }
 
       requestAnimationFrame(() => {
@@ -372,10 +429,12 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
           // Proactive viewport desync check — debounced so we don't
           // do the DOM read on every single data chunk.
+          // Check both for scrollHeight desync AND for stuck scroll positions
+          // (buffer has content we can't reach via DOM scrolling).
           if (!syncCheckTimeout) {
             syncCheckTimeout = setTimeout(() => {
               syncCheckTimeout = null
-              if (isViewportDesynced()) {
+              if (isViewportDesynced() || isScrollStuck(1) || isScrollStuck(-1)) {
                 forceViewportSync()
               }
             }, 500)
