@@ -778,6 +778,25 @@ export function SourceControl({
           ) : branchStatus && branchStatus !== 'in-progress' ? (
             <>
               <BranchStatusCard status={branchStatus} />
+              {branchStatus === 'pushed' && !prStatus && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={handleCreatePr}
+                    className="px-2 py-1 text-xs rounded bg-accent text-white hover:bg-accent/80"
+                  >
+                    Create PR
+                  </button>
+                  {hasWriteAccess && (currentRepo?.allowPushToMain ?? true) && (
+                    <button
+                      onClick={handlePushToMain}
+                      disabled={isPushingToMain}
+                      className="px-2 py-1 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
+                    >
+                      {isPushingToMain ? 'Pushing...' : `Push to ${branchBaseName}`}
+                    </button>
+                  )}
+                </div>
+              )}
               {(branchStatus === 'open' || branchStatus === 'pushed') && onOpenReview && (
                 <button
                   onClick={onOpenReview}
