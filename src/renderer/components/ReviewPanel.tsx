@@ -454,6 +454,16 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
     setError(null)
 
     try {
+      // Fetch latest changes from the PR branch before reviewing
+      if (session.prNumber) {
+        try {
+          const branchName = await window.git.getBranch(session.directory)
+          await window.git.pullPrBranch(session.directory, branchName, session.prNumber)
+        } catch {
+          // Non-fatal - might not have network
+        }
+      }
+
       // Create .broomy directory
       await window.fs.mkdir(broomyDir)
 
@@ -463,6 +473,7 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
 
       // Get previous review history for comparison
       let previousRequestedChanges: RequestedChange[] = []
+      let previousHeadCommit: string | undefined
       try {
         const historyExists = await window.fs.exists(historyFilePath)
         if (historyExists) {
@@ -470,15 +481,32 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
           const history = JSON.parse(content) as ReviewHistory
           if (history.reviews.length > 0) {
             previousRequestedChanges = history.reviews[0].requestedChanges || []
+            previousHeadCommit = history.reviews[0].headCommit
           }
         }
       } catch {
         // Non-fatal
       }
 
+      // Fetch PR comments for re-review context
+      let prComments: { body: string; path?: string; line?: number; author: string }[] | undefined
+      if (previousHeadCommit && session.prNumber) {
+        try {
+          const comments = await window.gh.prComments(session.directory, session.prNumber)
+          prComments = comments.map((c: { body: string; path?: string; line?: number; author: string }) => ({
+            body: c.body,
+            path: c.path,
+            line: c.line,
+            author: c.author,
+          }))
+        } catch {
+          // Non-fatal
+        }
+      }
+
       // Build the review prompt
       const reviewInstructions = repo?.reviewInstructions || ''
-      const prompt = buildReviewPrompt(session, reviewInstructions, previousRequestedChanges)
+      const prompt = buildReviewPrompt(session, reviewInstructions, previousRequestedChanges, previousHeadCommit, prComments)
 
       // Write the prompt file
       await window.fs.writeFile(promptFilePath, prompt)
@@ -668,9 +696,48 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
 
         {reviewData && (
           <>
-            {/* Changes Since Last Review */}
+            {/* Changes Since Last Review - narrative summary */}
+            {reviewData.changesSinceLastReview && (
+              <CollapsibleSection title="Since Last Review" defaultOpen={true}>
+                <div className="space-y-3">
+                  <div className="text-sm text-text-primary leading-relaxed">
+                    {reviewData.changesSinceLastReview.summary}
+                  </div>
+
+                  {reviewData.changesSinceLastReview.responsesToComments.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium text-text-secondary mb-1.5">Responses to Comments</div>
+                      <div className="space-y-2">
+                        {reviewData.changesSinceLastReview.responsesToComments.map((item, i) => (
+                          <div key={i} className="rounded border border-border bg-bg-primary p-2">
+                            <div className="text-xs text-text-secondary italic">{item.comment}</div>
+                            <div className="text-xs text-text-primary mt-1">{item.response}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {reviewData.changesSinceLastReview.otherNotableChanges.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium text-text-secondary mb-1.5">Other Notable Changes</div>
+                      <ul className="space-y-1">
+                        {reviewData.changesSinceLastReview.otherNotableChanges.map((change, i) => (
+                          <li key={i} className="text-xs text-text-primary flex gap-1.5">
+                            <span className="text-text-secondary flex-shrink-0">&bull;</span>
+                            <span>{change}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Requested Change Status from previous review */}
             {comparison && comparison.requestedChangeStatus.length > 0 && (
-              <CollapsibleSection title="Changes Since Last Review" count={comparison.requestedChangeStatus.length} defaultOpen={true}>
+              <CollapsibleSection title="Requested Change Status" count={comparison.requestedChangeStatus.length} defaultOpen={true}>
                 <div className="space-y-2">
                   <div className="text-sm text-text-primary mb-2">
                     Status of previously requested changes:

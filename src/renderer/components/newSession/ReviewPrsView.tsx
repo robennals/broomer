@@ -54,7 +54,12 @@ export function ReviewPrsView({
       const existingWorktree = worktrees.find(wt => wt.branch === branchName)
 
       if (existingWorktree) {
-        // Worktree exists, just open it
+        // Worktree exists - fetch latest changes before opening
+        try {
+          await window.git.pullPrBranch(existingWorktree.path, branchName, selectedPr.number)
+        } catch {
+          // Non-fatal - might not have network
+        }
         onComplete(existingWorktree.path, selectedAgentId, {
           repoId: repo.id,
           name: repo.name,
@@ -67,16 +72,28 @@ export function ReviewPrsView({
         return
       }
 
-      // Fetch the PR head ref (works for both same-repo and fork PRs)
-      const fetchResult = await window.git.fetchPrHead(mainDir, selectedPr.number)
-      if (!fetchResult.success) {
-        throw new Error(fetchResult.error || 'Failed to fetch PR head')
+      // Try to fetch the branch by name first (same-repo PRs)
+      const fetchBranchResult = await window.git.fetchBranch(mainDir, branchName)
+      const isFork = !fetchBranchResult.success
+
+      if (isFork) {
+        // Fork PR - fetch into a named remote-tracking ref so origin/${branchName} exists
+        const fetchResult = await window.git.fetchPrHead(mainDir, selectedPr.number, branchName)
+        if (!fetchResult.success) {
+          throw new Error(fetchResult.error || 'Failed to fetch PR head')
+        }
       }
 
-      // Create worktree for the PR branch from FETCH_HEAD
-      const result = await window.git.worktreeAdd(mainDir, worktreePath, branchName, 'FETCH_HEAD')
+      // Both cases: origin/${branchName} exists, worktree gets tracking automatically
+      const result = await window.git.worktreeAdd(mainDir, worktreePath, branchName, `origin/${branchName}`)
       if (!result.success) {
         throw new Error(result.error || 'Failed to create worktree')
+      }
+
+      // For fork PRs, configure git pull to use the PR ref
+      if (isFork) {
+        await window.git.setConfig(worktreePath, `branch.${branchName}.remote`, 'origin')
+        await window.git.setConfig(worktreePath, `branch.${branchName}.merge`, `refs/pull/${selectedPr.number}/head`)
       }
 
       // Run init script if exists (non-fatal)

@@ -527,15 +527,47 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('git:fetchPrHead', async (_event, repoPath: string, prNumber: number) => {
+  ipcMain.handle('git:fetchPrHead', async (_event, repoPath: string, prNumber: number, targetBranch?: string) => {
     if (ctx.isE2ETest) {
       return { success: true }
     }
 
     try {
       const git = simpleGit(expandHomePath(repoPath))
-      await git.fetch('origin', `pull/${prNumber}/head`)
+      if (targetBranch) {
+        // Fetch into a named remote-tracking ref so origin/${targetBranch} exists
+        await git.fetch('origin', `pull/${prNumber}/head:refs/remotes/origin/${targetBranch}`)
+      } else {
+        await git.fetch('origin', `pull/${prNumber}/head`)
+      }
       return { success: true }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // Fetch and merge latest changes for a PR branch.
+  // Tries fetching by branch name first (same-repo PRs), falls back to PR ref (fork PRs).
+  // For fork PRs, updates the remote-tracking ref so origin/${branchName} stays current.
+  ipcMain.handle('git:pullPrBranch', async (_event, repoPath: string, branchName: string, prNumber: number) => {
+    if (ctx.isE2ETest) {
+      return { success: true }
+    }
+
+    try {
+      const git = simpleGit(expandHomePath(repoPath))
+
+      // Try fetching the branch by name (works for same-repo PRs)
+      try {
+        await git.fetch('origin', branchName)
+        await git.merge([`origin/${branchName}`])
+        return { success: true }
+      } catch {
+        // Fall back to PR ref (fork PRs) - fetch into named ref so origin/${branchName} updates
+        await git.fetch('origin', `pull/${prNumber}/head:refs/remotes/origin/${branchName}`)
+        await git.merge([`origin/${branchName}`])
+        return { success: true }
+      }
     } catch (error) {
       return { success: false, error: String(error) }
     }
