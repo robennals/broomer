@@ -46,6 +46,14 @@ export function CloneView({
       const defaultBranch = await window.git.defaultBranch(mainDir)
       const remoteUrl = await window.git.remoteUrl(mainDir) || url
 
+      // Check write access to enable push-to-main by default
+      let allowPushToMain = false
+      try {
+        allowPushToMain = await window.gh.hasWriteAccess(mainDir)
+      } catch {
+        // gh CLI not available or other error - default to false
+      }
+
       // Save managed repo with default agent
       await addRepo({
         name: repoName,
@@ -53,6 +61,7 @@ export function CloneView({
         rootDir,
         defaultBranch,
         defaultAgentId: selectedAgentId || undefined,
+        allowPushToMain,
       })
 
       // Get the repo ID that was just created
