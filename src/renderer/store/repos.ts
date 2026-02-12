@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import type { ManagedRepo } from '../../preload/index'
 
-const generateId = () => `repo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+const generateId = () => `repo-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
 
 // Resolve ~ to the actual home directory using the main process
 async function resolveHome(path: string): Promise<string> {
   if (path.startsWith('~/') || path === '~') {
-    const home = await window.app.homedir()
+    const home: string = await window.app.homedir()
     return path === '~' ? home : home + path.slice(1)
   }
   return path

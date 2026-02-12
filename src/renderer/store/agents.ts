@@ -15,7 +15,7 @@ interface AgentStore {
   removeAgent: (id: string) => Promise<void>
 }
 
-const generateId = () => `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+const generateId = () => `agent-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
   agents: [],

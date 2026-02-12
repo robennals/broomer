@@ -32,7 +32,7 @@ export function RepoSettingsView({
         setLoading(false)
       }
     }
-    loadInitScript()
+    void loadInitScript()
   }, [repo.id])
 
   const handleSave = async () => {

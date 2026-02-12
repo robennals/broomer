@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import Editor, { loader, Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
@@ -8,6 +8,7 @@ import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import type { FileViewerPlugin, FileViewerComponentProps } from './types'
 import { getFileExtension } from './types'
+import { useMonacoComments } from '../../hooks/useMonacoComments'
 
 // Configure Monaco workers for Vite
 window.MonacoEnvironment = {
@@ -132,116 +133,31 @@ const getLanguageFromPath = (filePath: string): string => {
   return languageMap[ext] || 'plaintext'
 }
 
-interface PendingComment {
-  id: string
-  file: string
-  line: number
-  body: string
-  createdAt: string
-  pushed?: boolean
-}
-
 function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange, scrollToLine, searchHighlight, reviewContext, onEditorReady, onOpenFile }: FileViewerComponentProps) {
   const language = getLanguageFromPath(filePath)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const originalContentRef = useRef(content)
-  const [commentLine, setCommentLine] = useState<number | null>(null)
-  const [commentText, setCommentText] = useState('')
-  const [existingComments, setExistingComments] = useState<PendingComment[]>([])
-  const commentDecorationsRef = useRef<string[]>([])
   const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
   const scrollToLineRef = useRef(scrollToLine)
   const searchHighlightRef = useRef(searchHighlight)
   const onOpenFileRef = useRef(onOpenFile)
   onOpenFileRef.current = onOpenFile
 
+  const { commentLine, setCommentLine, commentText, setCommentText, handleAddComment } = useMonacoComments({
+    filePath,
+    reviewContext,
+    editorRef,
+  })
+
   // Keep refs in sync
   scrollToLineRef.current = scrollToLine
   searchHighlightRef.current = searchHighlight
-
-  // Load existing comments for this file
-  useEffect(() => {
-    if (!reviewContext) return
-    const loadComments = async () => {
-      try {
-        const exists = await window.fs.exists(reviewContext.commentsFilePath)
-        if (exists) {
-          const data = await window.fs.readFile(reviewContext.commentsFilePath)
-          const allComments: PendingComment[] = JSON.parse(data)
-          setExistingComments(allComments.filter(c => c.file === filePath))
-        }
-      } catch {
-        // No comments yet
-      }
-    }
-    loadComments()
-  }, [filePath, reviewContext?.commentsFilePath])
-
-  // Update comment decorations when comments change
-  useEffect(() => {
-    if (!editorRef.current || !reviewContext) return
-    const editor = editorRef.current
-    const model = editor.getModel()
-    if (!model) return
-
-    const decorations: monaco.editor.IModelDeltaDecoration[] = existingComments.map(c => ({
-      range: new monaco.Range(c.line, 1, c.line, 1),
-      options: {
-        isWholeLine: true,
-        glyphMarginClassName: 'review-comment-glyph',
-        glyphMarginHoverMessage: { value: c.body },
-        className: 'review-comment-line',
-      },
-    }))
-
-    commentDecorationsRef.current = editor.deltaDecorations(commentDecorationsRef.current, decorations)
-  }, [existingComments, reviewContext])
 
   // Update original content when file changes
   useEffect(() => {
     originalContentRef.current = content
     onDirtyChange?.(false, content)
   }, [content, filePath])
-
-  const handleAddComment = useCallback(async () => {
-    if (!reviewContext || commentLine === null || !commentText.trim()) return
-
-    const newComment: PendingComment = {
-      id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      file: filePath,
-      line: commentLine,
-      body: commentText.trim(),
-      createdAt: new Date().toISOString(),
-    }
-
-    try {
-      // Load all existing comments
-      let allComments: PendingComment[] = []
-      try {
-        const exists = await window.fs.exists(reviewContext.commentsFilePath)
-        if (exists) {
-          const data = await window.fs.readFile(reviewContext.commentsFilePath)
-          allComments = JSON.parse(data)
-        }
-      } catch {
-        // Start fresh
-      }
-
-      allComments.push(newComment)
-
-      // Ensure directory exists
-      const dir = reviewContext.commentsFilePath.replace('/comments.json', '')
-      await window.fs.mkdir(dir)
-      await window.fs.writeFile(reviewContext.commentsFilePath, JSON.stringify(allComments, null, 2))
-
-      // Update local state
-      setExistingComments(prev => [...prev, newComment])
-      setCommentLine(null)
-      setCommentText('')
-    } catch {
-      // Comment save failed
-    }
-  }, [reviewContext, commentLine, commentText, filePath])
 
   // Shared function to scroll and highlight
   const applyScrollAndHighlight = useCallback((editor: monaco.editor.IStandaloneCodeEditor) => {
@@ -296,7 +212,7 @@ function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange, scrol
     editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
       const editorContent = editor.getValue()
       if (onSave && editorContent !== originalContentRef.current) {
-        onSave(editorContent).then(() => {
+        void onSave(editorContent).then(() => {
           originalContentRef.current = editorContent
           onDirtyChange?.(false, editorContent)
         })
@@ -345,7 +261,7 @@ function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange, scrol
     return () => {
       onEditorReady?.(null)
     }
-  }, [])  
+  }, [])
 
   const handleEditorChange = (value: string | undefined) => {
     const newContent = value ?? ''
@@ -366,7 +282,7 @@ function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange, scrol
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && commentText.trim()) {
-                  handleAddComment()
+                  void handleAddComment()
                 } else if (e.key === 'Escape') {
                   setCommentLine(null)
                 }

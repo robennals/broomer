@@ -152,10 +152,8 @@ const broomyMocks = {
 if (typeof globalThis.window !== 'undefined' && typeof globalThis.document !== 'undefined') {
   // DOM environment — add Broomy APIs to the existing window
   Object.assign(globalThis.window, broomyMocks)
-  // Ensure confirm is mocked
-  if (!globalThis.window.confirm || typeof globalThis.window.confirm !== 'function') {
-    (globalThis.window as unknown as Record<string, unknown>).confirm = vi.fn().mockReturnValue(true)
-  }
+  // Always mock confirm so tests get a predictable stub
+  ;(globalThis.window as unknown as Record<string, unknown>).confirm = vi.fn().mockReturnValue(true)
 } else {
   // Node environment — create a minimal window object
   Object.defineProperty(globalThis, 'window', {

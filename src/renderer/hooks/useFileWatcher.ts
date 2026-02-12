@@ -42,21 +42,23 @@ export function useFileWatcher({
     const removeListener = window.fs.onChange(watcherId, () => {
       // Debounce to avoid multiple triggers
       if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(async () => {
-        try {
-          const newContent = await window.fs.readFile(filePath)
-          // Only trigger if content actually changed
-          if (newContent !== contentRef.current) {
-            if (isDirty) {
-              setFileChangedOnDisk(true)
-            } else {
-              setContent(newContent)
-              contentRef.current = newContent
+      debounceTimer = setTimeout(() => {
+        void (async () => {
+          try {
+            const newContent = await window.fs.readFile(filePath)
+            // Only trigger if content actually changed
+            if (newContent !== contentRef.current) {
+              if (isDirty) {
+                setFileChangedOnDisk(true)
+              } else {
+                setContent(newContent)
+                contentRef.current = newContent
+              }
             }
+          } catch {
+            // File might have been deleted
           }
-        } catch {
-          // File might have been deleted
-        }
+        })()
       }, 300)
     })
 

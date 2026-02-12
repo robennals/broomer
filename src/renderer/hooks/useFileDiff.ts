@@ -35,7 +35,7 @@ export function useFileDiff({
     const loadOriginal = async () => {
       try {
         // Convert absolute path to relative path for git show
-        const relativePath = filePath.startsWith(directory + '/')
+        const relativePath = filePath.startsWith(`${directory  }/`)
           ? filePath.slice(directory.length + 1)
           : filePath
         // Use diffBaseRef if provided (for branch changes), otherwise HEAD (for working changes)
@@ -46,7 +46,7 @@ export function useFileDiff({
       }
     }
 
-    loadOriginal()
+    void loadOriginal()
   }, [filePath, directory, canShowDiff, viewMode, diffBaseRef])
 
   // Load modified content from git when diffCurrentRef is set (commit diffs)
@@ -59,7 +59,7 @@ export function useFileDiff({
     let cancelled = false
     const loadModified = async () => {
       try {
-        const relativePath = filePath.startsWith(directory + '/')
+        const relativePath = filePath.startsWith(`${directory  }/`)
           ? filePath.slice(directory.length + 1)
           : filePath
         const modified = await window.git.show(directory, relativePath, diffCurrentRef)
@@ -69,7 +69,7 @@ export function useFileDiff({
       }
     }
 
-    loadModified()
+    void loadModified()
     return () => { cancelled = true }
   }, [filePath, directory, diffCurrentRef, viewMode])
 

@@ -6,10 +6,11 @@ import type { GitFileStatus, GitStatusResult } from '../../preload/index'
 export function normalizeGitStatus(status: unknown): GitStatusResult {
   // New format: object with files array
   if (status && typeof status === 'object' && !Array.isArray(status) && 'files' in status) {
-    const s = status as GitStatusResult
+    const s = status as { files?: Partial<GitFileStatus>[]; ahead?: number; behind?: number; tracking?: string | null; current?: string | null }
     return {
-      files: (s.files || []).map(f => ({
-        ...f,
+      files: (s.files ?? []).map(f => ({
+        path: f.path ?? '',
+        status: f.status ?? 'modified',
         staged: f.staged ?? false,
         indexStatus: f.indexStatus ?? ' ',
         workingDirStatus: f.workingDirStatus ?? ' ',
@@ -23,9 +24,9 @@ export function normalizeGitStatus(status: unknown): GitStatusResult {
   // Old format: flat array of {path, status}
   if (Array.isArray(status)) {
     return {
-      files: status.map((f: GitFileStatus) => ({
-        path: f.path,
-        status: f.status,
+      files: status.map((f: Partial<GitFileStatus>) => ({
+        path: f.path ?? '',
+        status: f.status ?? 'modified',
         staged: f.staged ?? false,
         indexStatus: f.indexStatus ?? ' ',
         workingDirStatus: f.workingDirStatus ?? ' ',
