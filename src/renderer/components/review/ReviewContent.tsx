@@ -2,6 +2,39 @@ import type { ReviewData, ReviewComparison, PendingComment, CodeLocation } from 
 import { CollapsibleSection } from './CollapsibleSection'
 import { LocationLink, SeverityBadge, ChangeStatusBadge } from './ReviewHelpers'
 
+function SinceLastReviewSection({ data }: { data: NonNullable<ReviewData['changesSinceLastReview']> }) {
+  return (
+    <CollapsibleSection title="Since Last Review" defaultOpen={true}>
+      <div className="space-y-3">
+        <div className="text-sm text-text-primary leading-relaxed">{data.summary}</div>
+        {data.responsesToComments.length > 0 && (
+          <div>
+            <div className="text-xs font-medium text-text-secondary mb-1">Responses to Comments</div>
+            <div className="space-y-1.5">
+              {data.responsesToComments.map((item, i) => (
+                <div key={i} className="text-sm rounded border border-border bg-bg-primary p-2">
+                  <div className="text-text-secondary text-xs">{item.comment}</div>
+                  <div className="text-text-primary mt-0.5">{item.response}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {data.otherNotableChanges.length > 0 && (
+          <div>
+            <div className="text-xs font-medium text-text-secondary mb-1">Other Notable Changes</div>
+            <ul className="list-disc list-inside text-sm text-text-primary space-y-0.5">
+              {data.otherNotableChanges.map((change, i) => (
+                <li key={i}>{change}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </CollapsibleSection>
+  )
+}
+
 interface ReviewContentProps {
   reviewData: ReviewData
   comparison: ReviewComparison | null
@@ -48,6 +81,11 @@ export function ReviewContent({
             )}
           </div>
         </CollapsibleSection>
+      )}
+
+      {/* Since Last Review (from agent's analysis) */}
+      {reviewData.changesSinceLastReview && (
+        <SinceLastReviewSection data={reviewData.changesSinceLastReview} />
       )}
 
       {/* Overview */}

@@ -79,6 +79,8 @@ const mockGh = {
   getPrCreateUrl: vi.fn().mockResolvedValue(null),
   prComments: vi.fn().mockResolvedValue([]),
   replyToComment: vi.fn().mockResolvedValue({ success: true }),
+  prsToReview: vi.fn().mockResolvedValue([]),
+  submitDraftReview: vi.fn().mockResolvedValue({ success: true }),
 }
 
 // Mock window.shell

@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import type { CodeLocation, RequestedChange, ReviewHistory } from '../../types/review'
 import type { Session } from '../../store/sessions'
 import type { ManagedRepo } from '../../../preload/index'
-import { buildReviewPrompt } from '../../utils/reviewPromptBuilder'
+import { buildReviewPrompt, type PrComment } from '../../utils/reviewPromptBuilder'
 import type { ReviewDataState } from './useReviewData'
 
 export interface ReviewActions {
@@ -74,11 +74,22 @@ export function useReviewActions(
     setError(null)
 
     try {
+      // Pull latest changes from the PR branch before reviewing
+      if (session.prNumber) {
+        try {
+          const branch = await window.git.getBranch(session.directory)
+          await window.git.pullPrBranch(session.directory, branch, session.prNumber)
+        } catch {
+          // Non-fatal - might not have network
+        }
+      }
+
       // Create .broomy directory
       await window.fs.mkdir(broomyDir)
 
       // Get previous review history for comparison
       let previousRequestedChanges: RequestedChange[] = []
+      let previousHeadCommit: string | undefined
       try {
         const historyExists = await window.fs.exists(historyFilePath)
         if (historyExists) {
@@ -86,15 +97,32 @@ export function useReviewActions(
           const history = JSON.parse(content) as ReviewHistory
           if (history.reviews.length > 0) {
             previousRequestedChanges = history.reviews[0].requestedChanges
+            previousHeadCommit = history.reviews[0].headCommit
           }
         }
       } catch {
         // Non-fatal
       }
 
+      // Fetch PR comments from GitHub for re-review context
+      let prComments: PrComment[] | undefined
+      if (session.prNumber && previousHeadCommit) {
+        try {
+          const ghComments = await window.gh.prComments(session.directory, session.prNumber)
+          prComments = ghComments.map(c => ({
+            body: c.body,
+            path: c.path || undefined,
+            line: c.line ?? undefined,
+            author: c.author,
+          }))
+        } catch {
+          // Non-fatal
+        }
+      }
+
       // Build the review prompt
       const reviewInstructions = repo?.reviewInstructions || ''
-      const prompt = buildReviewPrompt(session, reviewInstructions, previousRequestedChanges)
+      const prompt = buildReviewPrompt(session, reviewInstructions, previousRequestedChanges, previousHeadCommit, prComments)
 
       // Write the prompt file
       await window.fs.writeFile(promptFilePath, prompt)
