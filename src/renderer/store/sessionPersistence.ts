@@ -58,70 +58,72 @@ export function createPanelVisibilityFromLegacy(data: {
 
 // Debounced save to avoid too many writes during dragging
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
-export const debouncedSave = async (
+export const debouncedSave = (
   sessions: Session[],
   globalPanelVisibility: PanelVisibility,
   sidebarWidth: number,
   toolbarPanels: string[]
 ) => {
   if (saveTimeout) clearTimeout(saveTimeout)
-  saveTimeout = setTimeout(async () => {
-    // Save guard: refuse to persist an empty sessions array when we previously
-    // loaded real sessions. This prevents bugs (e.g. a failed loadSessions)
-    // from accidentally wiping all persisted session data.
-    if (sessions.length === 0 && loadedSessionCount > 0) {
-      console.warn(
-        `[sessionPersistence] Save guard: refusing to save empty sessions array ` +
-        `(${loadedSessionCount} sessions were loaded from disk)`
-      )
-      return
-    }
-    const config = await window.config.load(currentProfileId)
-    await window.config.save({
-      profileId: currentProfileId,
-      agents: config.agents,
-      sessions: sessions.map((s) => ({
-        id: s.id,
-        name: s.name,
-        directory: s.directory,
-        agentId: s.agentId,
-        repoId: s.repoId,
-        issueNumber: s.issueNumber,
-        issueTitle: s.issueTitle,
-        // Save new panelVisibility format
-        panelVisibility: s.panelVisibility,
-        // Review session fields
-        sessionType: s.sessionType,
-        prNumber: s.prNumber,
-        prTitle: s.prTitle,
-        prUrl: s.prUrl,
-        prBaseBranch: s.prBaseBranch,
-        // Also save legacy fields for backwards compat
-        showAgentTerminal: s.showAgentTerminal,
-        showUserTerminal: s.showUserTerminal,
-        showExplorer: s.showExplorer,
-        showFileViewer: s.showFileViewer,
-        showDiff: s.showDiff,
-        fileViewerPosition: s.fileViewerPosition,
-        layoutSizes: s.layoutSizes,
-        explorerFilter: s.explorerFilter,
-        terminalTabs: s.terminalTabs,
-        // Push to main tracking
-        pushedToMainAt: s.pushedToMainAt,
-        pushedToMainCommit: s.pushedToMainCommit,
-        // Commit tracking
-        hasHadCommits: s.hasHadCommits || undefined,
-        // PR state tracking
-        lastKnownPrState: s.lastKnownPrState,
-        lastKnownPrNumber: s.lastKnownPrNumber,
-        lastKnownPrUrl: s.lastKnownPrUrl,
-        // Archive state
-        isArchived: s.isArchived || undefined,
-      })),
-      // Global state
-      showSidebar: globalPanelVisibility[PANEL_IDS.SIDEBAR] ?? true,
-      sidebarWidth,
-      toolbarPanels,
-    })
+  saveTimeout = setTimeout(() => {
+    void (async () => {
+      // Save guard: refuse to persist an empty sessions array when we previously
+      // loaded real sessions. This prevents bugs (e.g. a failed loadSessions)
+      // from accidentally wiping all persisted session data.
+      if (sessions.length === 0 && loadedSessionCount > 0) {
+        console.warn(
+          `[sessionPersistence] Save guard: refusing to save empty sessions array ` +
+          `(${loadedSessionCount} sessions were loaded from disk)`
+        )
+        return
+      }
+      const config = await window.config.load(currentProfileId)
+      await window.config.save({
+        profileId: currentProfileId,
+        agents: config.agents,
+        sessions: sessions.map((s) => ({
+          id: s.id,
+          name: s.name,
+          directory: s.directory,
+          agentId: s.agentId,
+          repoId: s.repoId,
+          issueNumber: s.issueNumber,
+          issueTitle: s.issueTitle,
+          // Save new panelVisibility format
+          panelVisibility: s.panelVisibility,
+          // Review session fields
+          sessionType: s.sessionType,
+          prNumber: s.prNumber,
+          prTitle: s.prTitle,
+          prUrl: s.prUrl,
+          prBaseBranch: s.prBaseBranch,
+          // Also save legacy fields for backwards compat
+          showAgentTerminal: s.showAgentTerminal,
+          showUserTerminal: s.showUserTerminal,
+          showExplorer: s.showExplorer,
+          showFileViewer: s.showFileViewer,
+          showDiff: s.showDiff,
+          fileViewerPosition: s.fileViewerPosition,
+          layoutSizes: s.layoutSizes,
+          explorerFilter: s.explorerFilter,
+          terminalTabs: s.terminalTabs,
+          // Push to main tracking
+          pushedToMainAt: s.pushedToMainAt,
+          pushedToMainCommit: s.pushedToMainCommit,
+          // Commit tracking
+          hasHadCommits: s.hasHadCommits || undefined,
+          // PR state tracking
+          lastKnownPrState: s.lastKnownPrState,
+          lastKnownPrNumber: s.lastKnownPrNumber,
+          lastKnownPrUrl: s.lastKnownPrUrl,
+          // Archive state
+          isArchived: s.isArchived || undefined,
+        })),
+        // Global state
+        showSidebar: globalPanelVisibility[PANEL_IDS.SIDEBAR] ?? true,
+        sidebarWidth,
+        toolbarPanels,
+      })
+    })()
   }, 500)
 }

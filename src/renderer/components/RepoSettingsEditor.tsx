@@ -33,7 +33,7 @@ export function RepoSettingsEditor({
       }
       setLoadingScript(false)
     }
-    loadScript()
+    void loadScript()
   }, [repo.id])
 
   const handleSave = async () => {

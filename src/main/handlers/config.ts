@@ -78,7 +78,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   }
 
   // Profiles IPC handlers
-  ipcMain.handle('profiles:list', async () => {
+  ipcMain.handle('profiles:list', () => {
     if (ctx.isE2ETest) {
       return DEFAULT_PROFILES
     }
@@ -94,7 +94,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('profiles:save', async (_event, data: { profiles: { id: string; name: string; color: string }[]; lastProfileId: string }) => {
+  ipcMain.handle('profiles:save', (_event, data: { profiles: { id: string; name: string; color: string }[]; lastProfileId: string }) => {
     if (ctx.isE2ETest) {
       return { success: true }
     }
@@ -108,7 +108,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('profiles:openWindow', async (_event, profileId: string) => {
+  ipcMain.handle('profiles:openWindow', (_event, profileId: string) => {
     // Check if a window is already open for this profile
     const existing = ctx.profileWindows.get(profileId)
     if (existing && !existing.isDestroyed()) {
@@ -127,7 +127,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     return { success: true, alreadyOpen: false }
   })
 
-  ipcMain.handle('profiles:getOpenProfiles', async () => {
+  ipcMain.handle('profiles:getOpenProfiles', () => {
     const openProfiles: string[] = []
     for (const [profileId, window] of ctx.profileWindows) {
       if (!window.isDestroyed()) {
@@ -138,7 +138,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   })
 
   // Config IPC handlers - now profile-aware
-  ipcMain.handle('config:load', async (_event, profileId?: string) => {
+  ipcMain.handle('config:load', (_event, profileId?: string) => {
     // In E2E test mode, return demo sessions for consistent testing
     if (ctx.isE2ETest) {
       return {
@@ -215,7 +215,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   })
 
   // Init script handlers - profile-aware
-  ipcMain.handle('repos:getInitScript', async (_event, repoId: string, profileId?: string) => {
+  ipcMain.handle('repos:getInitScript', (_event, repoId: string, profileId?: string) => {
     if (ctx.isE2ETest) {
       return isWindows
         ? '@echo off\r\necho init script for E2E'
@@ -232,7 +232,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('repos:saveInitScript', async (_event, repoId: string, script: string, profileId?: string) => {
+  ipcMain.handle('repos:saveInitScript', (_event, repoId: string, script: string, profileId?: string) => {
     if (ctx.isE2ETest) {
       return { success: true }
     }

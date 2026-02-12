@@ -81,10 +81,10 @@ function createWindow(profileId?: string): BrowserWindow {
   // Load the renderer with profileId as query parameter
   const profileParam = profileId ? `?profile=${encodeURIComponent(profileId)}` : ''
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
-    window.loadURL(`${process.env.ELECTRON_RENDERER_URL}${profileParam}`)
+    void window.loadURL(`${process.env.ELECTRON_RENDERER_URL}${profileParam}`)
     window.webContents.openDevTools()
   } else {
-    window.loadFile(join(__dirname, '../renderer/index.html'), {
+    void window.loadFile(join(__dirname, '../renderer/index.html'), {
       search: profileId ? `profile=${encodeURIComponent(profileId)}` : undefined,
     })
   }
@@ -92,7 +92,7 @@ function createWindow(profileId?: string): BrowserWindow {
   // Ensure window shows once ready (but not in headless E2E mode)
   if (!(isE2ETest && isHeadless)) {
     window.once('ready-to-show', () => {
-      window?.show()
+      window.show()
     })
   }
 
@@ -162,7 +162,7 @@ const context: HandlerContext & { createWindow: (profileId?: string) => BrowserW
 registerAllHandlers(ipcMain, context)
 
 // App lifecycle
-app.whenReady().then(() => {
+void app.whenReady().then(() => {
   // Determine the initial profile to open
   let initialProfileId = 'default'
   if (!isE2ETest) {

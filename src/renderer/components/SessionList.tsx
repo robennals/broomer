@@ -106,7 +106,7 @@ function SessionCard({
   onDelete: (e: React.MouseEvent) => void
   onArchive?: (e: React.MouseEvent) => void
 }) {
-  const isUnread = session.isUnread === true
+  const isUnread = session.isUnread
 
   return (
     <div
@@ -117,12 +117,12 @@ function SessionCard({
           onSelect()
         } else if (e.key === 'ArrowDown') {
           e.preventDefault()
-          const next = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement
-          if (next?.tabIndex >= 0) next.focus()
+          const next = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null
+          if (next && next.tabIndex >= 0) next.focus()
         } else if (e.key === 'ArrowUp') {
           e.preventDefault()
-          const prev = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement
-          if (prev?.tabIndex >= 0) prev.focus()
+          const prev = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null
+          if (prev && prev.tabIndex >= 0) prev.focus()
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
           onDelete(e as unknown as React.MouseEvent)
         }
