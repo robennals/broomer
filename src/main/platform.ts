@@ -1,3 +1,10 @@
+/**
+ * Cross-platform shell and path utilities.
+ *
+ * Provides OS detection flags, default shell resolution (respecting the SHELL
+ * environment variable on Unix, ComSpec on Windows), path normalization to
+ * forward slashes, and a chmod helper that is a no-op on Windows.
+ */
 import { chmodSync } from 'fs'
 
 export const isWindows = process.platform === 'win32'

@@ -1,3 +1,15 @@
+/**
+ * Main process entry point for the Broomy Electron app.
+ *
+ * Creates the BrowserWindow, registers every IPC handler the renderer can call,
+ * and manages application lifecycle (PTY processes, file watchers, window cleanup).
+ * Handlers are organized into groups: PTY management (node-pty), config/profile
+ * persistence (~/.broomy/), git operations (simple-git), GitHub CLI wrappers (gh),
+ * filesystem I/O, shell execution, native context menus, and TypeScript project
+ * context collection. Every handler checks the `isE2ETest` flag and returns
+ * deterministic mock data during Playwright tests so no real repos, APIs, or
+ * config files are touched.
+ */
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, FSWatcher } from 'fs'
@@ -99,14 +111,27 @@ function createWindow(profileId?: string): BrowserWindow {
     if (profileId) {
       profileWindows.delete(profileId)
     }
-    // Kill PTY processes belonging to this window
-    for (const [id, ptyProcess] of ptyProcesses) {
-      ptyProcess.kill()
-      ptyProcesses.delete(id)
+    // Kill PTY processes belonging to this window only
+    for (const [id, owner] of ptyOwnerWindows) {
+      if (owner === window) {
+        const ptyProcess = ptyProcesses.get(id)
+        if (ptyProcess) {
+          ptyProcess.kill()
+          ptyProcesses.delete(id)
+        }
+        ptyOwnerWindows.delete(id)
+      }
     }
-    for (const [id, watcher] of fileWatchers) {
-      watcher.close()
-      fileWatchers.delete(id)
+    // Close file watchers belonging to this window only
+    for (const [id, owner] of watcherOwnerWindows) {
+      if (owner === window) {
+        const watcher = fileWatchers.get(id)
+        if (watcher) {
+          watcher.close()
+          fileWatchers.delete(id)
+        }
+        watcherOwnerWindows.delete(id)
+      }
     }
     if (window === mainWindow) {
       mainWindow = null
