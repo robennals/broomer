@@ -62,7 +62,7 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
     setSelectedViewerId,
   })
 
-  const { originalContent, diffModifiedContent } = useFileDiff({
+  const { originalContent, diffModifiedContent, isLoadingDiff } = useFileDiff({
     filePath,
     directory,
     canShowDiff,
@@ -388,13 +388,19 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
       </div>
       <div className="flex-1 min-h-0">
         {viewMode === 'diff' ? (
-          <MonacoDiffViewer
-            filePath={filePath}
-            originalContent={originalContent}
-            modifiedContent={diffModifiedContent !== null ? diffModifiedContent : (fileStatus === 'deleted' ? '' : content)}
-            sideBySide={diffSideBySide}
-            scrollToLine={scrollToLine}
-          />
+          isLoadingDiff ? (
+            <div className="h-full flex items-center justify-center text-text-secondary text-sm">
+              Loading diff...
+            </div>
+          ) : (
+            <MonacoDiffViewer
+              filePath={filePath}
+              originalContent={originalContent}
+              modifiedContent={diffModifiedContent !== null ? diffModifiedContent : (fileStatus === 'deleted' ? '' : content)}
+              sideBySide={diffSideBySide}
+              scrollToLine={scrollToLine}
+            />
+          )
         ) : (
           <ViewerComponent
             filePath={filePath}
