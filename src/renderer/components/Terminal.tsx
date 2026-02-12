@@ -259,11 +259,6 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       // This MUST happen synchronously — if we wait for rAF, the onRender
       // handler would see isFollowing=true and fight the user's scroll.
       if (e instanceof WheelEvent && e.deltaY < 0) {
-        // If the viewport is desynced, fix it immediately so this scroll
-        // gesture actually works (user shouldn't have to scroll twice).
-        if (isViewportDesynced()) {
-          forceViewportSync()
-        }
         isFollowingRef.current = false
         // Cancel any pending scroll-to-bottom retry from a recent write
         if (pendingScrollRAF) {
@@ -272,31 +267,35 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
         }
       }
 
-      // Check for stuck scrolling in either direction and fix desync.
-      // This handles the case where you're at the top trying to scroll down
-      // to see new content, but the scroll won't move.
+      // Unified stuck scroll detection for both directions.
+      // We no longer preemptively call forceViewportSync() on upward scroll
+      // because that resize can itself cause position jumps. Instead, we
+      // only force sync if the scroll actually doesn't move when it should.
       if (e instanceof WheelEvent) {
         const direction = e.deltaY > 0 ? 1 : -1
         const scrollTopBefore = viewportEl?.scrollTop ?? 0
+        const viewportYBefore = terminal.buffer.active.viewportY
 
         // Use rAF to check after the scroll event has been processed
         requestAnimationFrame(() => {
           const scrollTopAfter = viewportEl?.scrollTop ?? 0
+          const viewportYAfter = terminal.buffer.active.viewportY
           const scrollMoved = Math.abs(scrollTopAfter - scrollTopBefore) > 0.5
+          const bufferMoved = viewportYAfter !== viewportYBefore
 
-          // If scroll didn't move but we should be able to scroll further
-          if (!scrollMoved && isScrollStuck(direction as 1 | -1)) {
+          // If neither DOM scroll nor buffer position moved, but we should
+          // be able to scroll further, we're stuck and need to resync
+          if (!scrollMoved && !bufferMoved && isScrollStuck(direction as 1 | -1)) {
             const now = Date.now()
             stuckScrollCount++
 
-            // Only sync if we've seen multiple stuck scrolls (avoids false positives)
-            // and haven't synced very recently (avoid sync loops)
+            // Force sync after 2 stuck attempts, with 500ms cooldown
             if (stuckScrollCount >= 2 && now - lastStuckSyncTime > 500) {
               forceViewportSync()
               lastStuckSyncTime = now
               stuckScrollCount = 0
             }
-          } else if (scrollMoved) {
+          } else if (scrollMoved || bufferMoved) {
             // Reset stuck counter on successful scroll
             stuckScrollCount = 0
           }
