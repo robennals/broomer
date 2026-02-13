@@ -1,4 +1,5 @@
 import { ipcRenderer } from 'electron'
+import { tmpdir } from 'os'
 
 export type ShellApi = {
   exec: (command: string, cwd: string) => Promise<{ success: boolean; stdout: string; stderr: string; exitCode: number }>
@@ -13,6 +14,7 @@ export type AppApi = {
   isDev: () => Promise<boolean>
   homedir: () => Promise<string>
   platform: () => Promise<string>
+  tmpdir: string
 }
 
 export const shellApi: ShellApi = {
@@ -28,4 +30,5 @@ export const appApi: AppApi = {
   isDev: () => ipcRenderer.invoke('app:isDev'),
   homedir: () => ipcRenderer.invoke('app:homedir'),
   platform: () => ipcRenderer.invoke('app:platform'),
+  tmpdir: tmpdir().replace(/\\/g, '/'),
 }

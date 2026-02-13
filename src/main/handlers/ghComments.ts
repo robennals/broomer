@@ -41,7 +41,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
 
       const comments = result
         .trim()
-        .split('\n')
+        .split(/\r?\n/)
         .filter(line => line.trim())
         .map(line => {
           try {

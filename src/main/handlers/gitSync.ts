@@ -150,7 +150,7 @@ async function handleBranchChanges(ctx: HandlerContext, repoPath: string, baseBr
     const diffOutput = await git.raw(['diff', '--name-status', `origin/${baseBranch}...HEAD`])
 
     const files: { path: string; status: string }[] = []
-    for (const line of diffOutput.trim().split('\n')) {
+    for (const line of diffOutput.trim().split(/\r?\n/)) {
       if (!line.trim()) continue
       const parts = line.split('\t')
       const statusChar = parts[0]
@@ -230,7 +230,7 @@ async function handleBranchCommits(ctx: HandlerContext, repoPath: string, baseBr
     ])
 
     const commits: { hash: string; shortHash: string; message: string; author: string; date: string }[] = []
-    for (const line of logOutput.trim().split('\n')) {
+    for (const line of logOutput.trim().split(/\r?\n/)) {
       if (!line.trim()) continue
       const parts = line.split(SEP)
       if (parts.length >= 5) {
@@ -263,7 +263,7 @@ async function handleCommitFiles(ctx: HandlerContext, repoPath: string, commitHa
     const output = await git.raw(['diff-tree', '--no-commit-id', '--name-status', '-r', commitHash])
 
     const files: { path: string; status: string }[] = []
-    for (const line of output.trim().split('\n')) {
+    for (const line of output.trim().split(/\r?\n/)) {
       if (!line.trim()) continue
       const parts = line.split('\t')
       const statusChar = parts[0]

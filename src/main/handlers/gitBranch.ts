@@ -46,7 +46,7 @@ async function handleWorktreeList(ctx: HandlerContext, repoPath: string) {
     const worktrees: { path: string; branch: string; head: string }[] = []
     let current: { path: string; branch: string; head: string } = { path: '', branch: '', head: '' }
 
-    for (const line of raw.split('\n')) {
+    for (const line of raw.split(/\r?\n/)) {
       if (line.startsWith('worktree ')) {
         if (current.path) worktrees.push(current)
         current = { path: normalizePath(line.slice(9)), branch: '', head: '' }
@@ -252,7 +252,7 @@ async function handleIsMergedInto(ctx: HandlerContext, repoPath: string, ref: st
       if (!changedFiles) {
         return true
       }
-      const fileList = changedFiles.split('\n')
+      const fileList = changedFiles.split(/\r?\n/)
       // Check if origin/ref has the same content for all files changed on this branch.
       // Use --name-only instead of --quiet because simple-git doesn't throw on exit code 1.
       const diffOutput = (await git.raw(['diff', '--name-only', `origin/${ref}`, 'HEAD', '--', ...fileList])).trim()

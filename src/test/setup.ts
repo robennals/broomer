@@ -17,6 +17,7 @@ const mockConfig = {
 
 // Mock window.git
 const mockGit = {
+  isInstalled: vi.fn().mockResolvedValue(true),
   getBranch: vi.fn().mockResolvedValue('main'),
   isGitRepo: vi.fn().mockResolvedValue(true),
   status: vi.fn().mockResolvedValue({ files: [], ahead: 0, behind: 0, tracking: null, current: 'main' }),
@@ -58,6 +59,7 @@ const mockApp = {
   isDev: vi.fn().mockResolvedValue(false),
   homedir: vi.fn().mockResolvedValue('/Users/test'),
   platform: vi.fn().mockResolvedValue('darwin'),
+  tmpdir: '/tmp',
 }
 
 // Mock window.profiles

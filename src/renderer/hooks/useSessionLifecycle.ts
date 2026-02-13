@@ -17,6 +17,7 @@ export function useSessionLifecycle({
   loadAgents,
   loadRepos,
   checkGhAvailability,
+  checkGitAvailability,
   switchProfile,
   markSessionRead,
   refreshAllBranches,
@@ -32,6 +33,7 @@ export function useSessionLifecycle({
   loadAgents: (profileId: string) => Promise<void>
   loadRepos: (profileId: string) => Promise<void>
   checkGhAvailability: () => Promise<void>
+  checkGitAvailability: () => Promise<void>
   switchProfile: (profileId: string) => Promise<void>
   markSessionRead: (sessionId: string) => void
   refreshAllBranches: () => void | Promise<void>
@@ -60,6 +62,7 @@ export function useSessionLifecycle({
       void loadAgents(currentProfileId)
       void loadRepos(currentProfileId)
       void checkGhAvailability()
+      void checkGitAvailability()
     })
   }, [])
 

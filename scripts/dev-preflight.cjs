@@ -63,7 +63,9 @@ async function main() {
       run('pnpm install')
     } catch {
       console.error(`\n${red('pnpm install failed.')} Try:`)
-      console.error(`  rm -rf node_modules && pnpm install\n`)
+      console.error(process.platform === 'win32'
+        ? `  rmdir /s /q node_modules && pnpm install\n`
+        : `  rm -rf node_modules && pnpm install\n`)
       process.exit(1)
     }
   }
@@ -92,7 +94,9 @@ async function main() {
       run('node node_modules/electron/install.js')
     } catch {
       console.error(`\n${red('Electron download failed.')} Try:`)
-      console.error(`  rm -rf node_modules/electron && pnpm install\n`)
+      console.error(process.platform === 'win32'
+        ? `  rmdir /s /q node_modules\\electron && pnpm install\n`
+        : `  rm -rf node_modules/electron && pnpm install\n`)
       process.exit(1)
     }
 
@@ -101,7 +105,9 @@ async function main() {
     const pathTxt = path.join(electronDir, 'path.txt')
     if (!fs.existsSync(pathTxt)) {
       console.error(`\n${red('Electron binary still missing after download.')} Try:`)
-      console.error(`  rm -rf node_modules && pnpm install\n`)
+      console.error(process.platform === 'win32'
+        ? `  rmdir /s /q node_modules && pnpm install\n`
+        : `  rm -rf node_modules && pnpm install\n`)
       process.exit(1)
     }
   }
@@ -156,7 +162,9 @@ async function main() {
     } catch {
       console.error(`\n${red('Native module rebuild failed.')} Try:`)
       console.error(`  npx @electron/rebuild`)
-      console.error(`  # or: rm -rf node_modules && pnpm install\n`)
+      console.error(process.platform === 'win32'
+        ? `  # or: rmdir /s /q node_modules && pnpm install\n`
+        : `  # or: rm -rf node_modules && pnpm install\n`)
       process.exit(1)
     }
   }

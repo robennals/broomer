@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron'
 import type { GitStatusResult, GitCommitInfo, WorktreeInfo } from './types'
 
 export type GitApi = {
+  isInstalled: () => Promise<boolean>
   getBranch: (path: string) => Promise<string>
   isGitRepo: (path: string) => Promise<boolean>
   status: (path: string) => Promise<GitStatusResult>
@@ -39,6 +40,7 @@ export type GitApi = {
 }
 
 export const gitApi: GitApi = {
+  isInstalled: () => ipcRenderer.invoke('git:isInstalled'),
   getBranch: (path) => ipcRenderer.invoke('git:getBranch', path),
   isGitRepo: (path) => ipcRenderer.invoke('git:isGitRepo', path),
   status: (path) => ipcRenderer.invoke('git:status', path),

@@ -81,7 +81,7 @@ export function SCPrBanner({
             title="Click to view full error"
             onClick={async () => {
               const errorContent = `${gitOpError.operation} failed\n${'='.repeat(40)}\n\n${gitOpError.message}`
-              const errorPath = '/tmp/broomy-git-error.txt'
+              const errorPath = `${window.app.tmpdir}/broomy-git-error.txt`
               await window.fs.writeFile(errorPath, errorContent)
               onFileSelect?.({ filePath: errorPath, openInDiffMode: false })
             }}
