@@ -17,6 +17,8 @@ import { useAgentStore } from './store/agents'
 import { useRepoStore } from './store/repos'
 import { useProfileStore } from './store/profiles'
 import { PanelProvider } from './panels'
+import ErrorBoundary from './components/ErrorBoundary'
+import ErrorDetailModal from './components/ErrorDetailModal'
 import { useGitPolling } from './hooks/useGitPolling'
 import { useFileNavigation } from './hooks/useFileNavigation'
 import { useSessionLifecycle } from './hooks/useSessionLifecycle'
@@ -294,12 +296,15 @@ function App() {
   }, [])
 
   return (
-    <PanelProvider
-      toolbarPanels={toolbarPanels}
-      onToolbarPanelsChange={setToolbarPanels}
-    >
-      <AppContent />
-    </PanelProvider>
+    <ErrorBoundary>
+      <PanelProvider
+        toolbarPanels={toolbarPanels}
+        onToolbarPanelsChange={setToolbarPanels}
+      >
+        <AppContent />
+        <ErrorDetailModal />
+      </PanelProvider>
+    </ErrorBoundary>
   )
 }
 

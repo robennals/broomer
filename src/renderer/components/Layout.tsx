@@ -14,8 +14,10 @@ import type { PanelDefinition } from '../panels'
 import { useDividerResize } from '../hooks/useDividerResize'
 import type { DividerType } from '../hooks/useDividerResize'
 import { useLayoutKeyboard } from '../hooks/useLayoutKeyboard'
+import { useAppBannerError } from '../hooks/useErrorBanners'
 import LayoutToolbar from './LayoutToolbar'
 import LayoutContentArea from './LayoutContentArea'
+import { ErrorBanner } from './ErrorBanner'
 
 interface LayoutProps {
   // Panel content
@@ -56,6 +58,7 @@ export default function Layout({
 }: LayoutProps) {
   const [isDev, setIsDev] = useState(false)
   const { registry, toolbarPanels, getShortcutKey } = usePanelContext()
+  const appBannerError = useAppBannerError()
 
   // Check if we're in dev mode on mount
   useEffect(() => {
@@ -167,6 +170,9 @@ export default function Layout({
         onOpenPanelPicker={onOpenPanelPicker}
         settingsPanelId={PANEL_IDS.SETTINGS}
       />
+
+      {/* App-level error banner */}
+      {appBannerError && <ErrorBanner error={appBannerError} />}
 
       {/* Main content area */}
       <div ref={mainContentRef} className="flex-1 flex min-h-0">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAgentStore } from '../../store/agents'
 import type { ManagedRepo, GitHubPrForReview } from '../../../preload/index'
+import { DialogErrorBanner } from '../ErrorBanner'
 
 async function createReviewWorktree(repo: ManagedRepo, pr: GitHubPrForReview): Promise<{ worktreePath: string; error?: string }> {
   const mainDir = `${repo.rootDir}/main`
@@ -219,7 +220,7 @@ export function ReviewPrsView({
         )}
 
         {error && (
-          <div className="text-xs text-red-400 bg-red-400/10 rounded px-3 py-2 whitespace-pre-wrap">{error}</div>
+          <DialogErrorBanner error={error} onDismiss={() => setError(null)} />
         )}
 
         {!loading && !error && prs.length === 0 && (

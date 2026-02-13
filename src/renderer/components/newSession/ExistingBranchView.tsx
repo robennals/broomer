@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAgentStore } from '../../store/agents'
 import type { ManagedRepo } from '../../../preload/index'
 import type { BranchInfo } from './types'
+import { DialogErrorBanner } from '../ErrorBanner'
 
 async function fetchBranchList(repo: ManagedRepo): Promise<{ branches: BranchInfo[]; error?: string }> {
   try {
@@ -185,7 +186,7 @@ export function ExistingBranchView({
           </div>
 
           {error && (
-            <div className="text-xs text-red-400 bg-red-400/10 rounded px-3 py-2 whitespace-pre-wrap">{error}</div>
+            <DialogErrorBanner error={error} onDismiss={() => setError(null)} />
           )}
         </div>
         <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
@@ -246,7 +247,7 @@ export function ExistingBranchView({
         )}
 
         {error && (
-          <div className="text-xs text-red-400 bg-red-400/10 rounded px-3 py-2 whitespace-pre-wrap">{error}</div>
+          <DialogErrorBanner error={error} onDismiss={() => setError(null)} />
         )}
 
         {!loading && !error && branches.length === 0 && (

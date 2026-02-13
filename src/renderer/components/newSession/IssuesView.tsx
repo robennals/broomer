@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { ManagedRepo, GitHubIssue } from '../../../preload/index'
+import { DialogErrorBanner } from '../ErrorBanner'
 
 export function IssuesView({
   repo,
@@ -55,7 +56,7 @@ export function IssuesView({
         )}
 
         {error && (
-          <div className="text-xs text-red-400 bg-red-400/10 rounded px-3 py-2 whitespace-pre-wrap">{error}</div>
+          <DialogErrorBanner error={error} onDismiss={() => setError(null)} />
         )}
 
         {!loading && !error && issues.length === 0 && (
