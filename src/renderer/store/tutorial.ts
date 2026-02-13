@@ -5,6 +5,7 @@ export interface TutorialStep {
   id: string
   title: string
   description: string
+  link?: { label: string; url: string }
 }
 
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
@@ -27,6 +28,11 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     id: 'viewed-file',
     title: 'View a file',
     description: 'The File Viewer opens files with syntax highlighting and diff support, so you can review exactly what your agent changed. Click any file in the Explorer, or press Cmd/Ctrl+P to open the Explorer search and find files by name. Changed files can be viewed as side-by-side diffs.',
+  },
+  {
+    id: 'viewed-recent-files',
+    title: 'View recent files',
+    description: 'The Explorer has a Recent tab that shows files you\'ve recently opened, so you can quickly jump back to them. Switch to the Recent tab in the Explorer to see your file history and click any entry to reopen it.',
   },
   {
     id: 'used-agent',
@@ -57,6 +63,12 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     id: 'viewed-settings',
     title: 'Configure agents',
     description: 'Different agents have different strengths. Open Settings with the gear icon in the toolbar to add and configure which AI agents are available, specifying their launch command and working directory.',
+  },
+  {
+    id: 'contribute-extension',
+    title: 'Contribute an extension',
+    description: 'Broomy is fully open source and extensible. If there\'s something you want it to do that it can\'t yet, submit a pull request to add the functionality you want.',
+    link: { label: 'Broomy on GitHub', url: 'https://github.com/Broomy-AI/broomy' },
   },
 ] as const
 

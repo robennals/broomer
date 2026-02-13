@@ -117,6 +117,12 @@ export default function TutorialPanel() {
                 <div className="px-4 pb-4 pl-12">
                   <p className="text-xs text-text-secondary leading-relaxed">
                     {step.description}
+                    {step.link && (
+                      <>
+                        {' '}
+                        <button onClick={() => window.shell.openExternal(step.link!.url)} className="text-accent hover:underline">{step.link.label}</button>
+                      </>
+                    )}
                   </p>
                 </div>
               )}

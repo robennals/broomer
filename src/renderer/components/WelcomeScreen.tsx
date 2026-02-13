@@ -10,8 +10,8 @@ export default function WelcomeScreen({ onNewSession }: WelcomeScreenProps) {
           Welcome to Broomy
         </h1>
         <p className="text-sm text-text-secondary mb-8">
-          Manage multiple AI sessions across branches and repositories.
-          See what every agent is doing. Fully open source, extensible, and MIT licensed.
+          Lead a team of agents and see when each needs help.
+          Let an AI help you review code. Fully open source and extensible.
         </p>
 
         <button
@@ -35,6 +35,11 @@ export default function WelcomeScreen({ onNewSession }: WelcomeScreenProps) {
           </p>
           <p>
             Check the <span className="text-text-primary font-medium">Help</span> menu for keyboard shortcuts and more.
+          </p>
+          <p>
+            Broomy is new and, while we do our best to make it bug-free, you may run into issues.
+            If you do, please{' '}
+            <button onClick={() => window.shell.openExternal('https://github.com/Broomy-AI/broomy/issues')} className="text-accent hover:underline">let us know</button>.
           </p>
         </div>
       </div>

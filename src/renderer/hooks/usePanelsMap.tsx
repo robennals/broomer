@@ -60,6 +60,7 @@ function useExplorerPanel(config: PanelsMapConfig) {
     activeSessionId, activeSession, activeSessionGitStatus, activeSessionGitStatusResult,
     navigateToFile, fetchGitStatus, setExplorerFilter,
     recordPushToMain, clearPushToMain, updatePrState, setPanelVisibility, setToolbarPanels,
+    markStepComplete,
   } = config
 
   return useMemo(() => {
@@ -72,7 +73,10 @@ function useExplorerPanel(config: PanelsMapConfig) {
         gitStatus={activeSessionGitStatus}
         syncStatus={activeSessionGitStatusResult}
         filter={activeSession.explorerFilter}
-        onFilterChange={(filter) => activeSessionId && setExplorerFilter(activeSessionId, filter)}
+        onFilterChange={(filter) => {
+          if (activeSessionId) setExplorerFilter(activeSessionId, filter)
+          if (filter === 'recent') markStepComplete?.('viewed-recent-files')
+        }}
         onGitStatusRefresh={fetchGitStatus}
         recentFiles={activeSession.recentFiles}
         sessionId={activeSessionId ?? undefined}

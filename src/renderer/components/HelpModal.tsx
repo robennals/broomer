@@ -10,6 +10,21 @@ type TabId = 'overview' | 'shortcuts' | 'agents'
 const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toUpperCase().includes('MAC')
 const modKey = isMac ? 'Cmd' : 'Ctrl'
 
+const shortcutSections = [
+  { title: 'Panel Shortcuts', items: [
+    ['Toggle Sessions', `${modKey}+1`], ['Toggle Explorer', `${modKey}+2`], ['Toggle File Viewer', `${modKey}+3`],
+    ['Toggle Agent', `${modKey}+4`], ['Toggle Terminal', `${modKey}+5`], ['Toggle Guide', `${modKey}+6`],
+  ]},
+  { title: 'Navigation', items: [['Cycle Panels Forward', 'Ctrl+Tab'], ['Cycle Panels Backward', 'Ctrl+Shift+Tab']] },
+  { title: 'File Operations', items: [['Save File', `${modKey}+S`], ['Search Files', `${modKey}+P`]] },
+  { title: 'Terminal & Agent', items: [
+    ['New Line (without submitting)', 'Shift+Enter'],
+    ['Move to Start/End of Line', `${modKey}+Left / ${modKey}+Right`],
+    ['Delete to Start of Line', `${modKey}+Delete`],
+  ]},
+  { title: 'Debug', items: [['Copy Terminal + Info', `${modKey}+Shift+C`]] },
+]
+
 export default function HelpModal({ onClose }: HelpModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
 
@@ -82,6 +97,10 @@ export default function HelpModal({ onClose }: HelpModalProps) {
                     <dd className="text-text-secondary">AI coding assistants that run in the terminal. Configure them in Settings.</dd>
                   </div>
                   <div>
+                    <dt className="font-medium text-text-primary">Reviews</dt>
+                    <dd className="text-text-secondary">Review pull requests with AI assistance — see diffs, leave comments, and get summaries. Create a review session from the New Session dialog.</dd>
+                  </div>
+                  <div>
                     <dt className="font-medium text-text-primary">Panels</dt>
                     <dd className="text-text-secondary">Toggle different views (Explorer, File Viewer, Terminal) using the toolbar or keyboard shortcuts.</dd>
                   </div>
@@ -102,59 +121,19 @@ export default function HelpModal({ onClose }: HelpModalProps) {
 
           {activeTab === 'shortcuts' && (
             <div className="space-y-6">
-              <section>
-                <h3 className="text-sm font-medium text-text-primary mb-3">Panel Shortcuts</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Toggle Sessions</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{modKey}+1</kbd>
+              {shortcutSections.map((section) => (
+                <section key={section.title}>
+                  <h3 className="text-sm font-medium text-text-primary mb-3">{section.title}</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {section.items.map(([label, keys]) => (
+                      <div key={label} className="flex justify-between">
+                        <span className="text-text-secondary">{label}</span>
+                        <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{keys}</kbd>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Toggle Explorer</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{modKey}+2</kbd>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Toggle File Viewer</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{modKey}+3</kbd>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Toggle Agent</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{modKey}+4</kbd>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Toggle Terminal</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{modKey}+5</kbd>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Toggle Guide</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{modKey}+6</kbd>
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                <h3 className="text-sm font-medium text-text-primary mb-3">Navigation</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Cycle Panels Forward</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">Ctrl+Tab</kbd>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Cycle Panels Backward</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">Ctrl+Shift+Tab</kbd>
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                <h3 className="text-sm font-medium text-text-primary mb-3">Debug</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Copy Terminal + Info</span>
-                    <kbd className="px-2 py-0.5 rounded bg-bg-tertiary text-text-primary">{modKey}+Shift+C</kbd>
-                  </div>
-                </div>
-              </section>
+                </section>
+              ))}
             </div>
           )}
 

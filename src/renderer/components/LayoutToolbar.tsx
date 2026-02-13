@@ -57,19 +57,19 @@ export default function LayoutToolbar({
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
         {toolbarPanelInfo.map(panel => {
-          const isSettings = panel.id === settingsPanelId
+          const isIconOnly = panel.id === settingsPanelId || panel.id === 'tutorial'
           return (
             <button
               key={panel.id}
               onClick={() => onToggle(panel.id)}
-              className={`${isSettings ? 'p-1.5' : 'px-3 py-1 text-xs'} rounded transition-colors ${
+              className={`${isIconOnly ? 'p-1.5' : 'px-3 py-1 text-xs'} rounded transition-colors ${
                 panel.isVisible
                   ? 'bg-accent text-white'
                   : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
               }`}
               title={`${panel.name}${panel.shortcutKey ? ` (${formatShortcut(panel.shortcutKey)})` : ''}`}
             >
-              {isSettings ? panel.icon : panel.name}
+              {isIconOnly ? panel.icon : panel.name}
             </button>
           )
         })}

@@ -38,6 +38,14 @@ const shortcutGroups: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Terminal & Agent',
+    shortcuts: [
+      { label: 'New Line (without submitting)', keys: 'Shift+Enter' },
+      { label: 'Move to Start/End of Line', keys: `${modKey}+Left / ${modKey}+Right` },
+      { label: 'Delete to Start of Line', keys: `${modKey}+Delete` },
+    ],
+  },
+  {
     title: 'Debug',
     shortcuts: [
       { label: 'Copy Terminal + Session Info', keys: `${modKey}+Shift+C` },
