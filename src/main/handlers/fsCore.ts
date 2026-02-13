@@ -118,7 +118,7 @@ function handleReadFile(ctx: HandlerContext, filePath: string) {
       return lines.join('\n')
     }
     // Screenshot mode: fake review data for ReviewPanel
-    if (ctx.isScreenshotMode && (/\/tmp\/broomy-review-[^/]+\/review\.json$/.exec(filePath))) {
+    if (ctx.isScreenshotMode && (/broomy-review-[^/\\]+[/\\]review\.json$/.exec(filePath))) {
       return JSON.stringify({
         version: 1,
         generatedAt: '2025-01-15T10:30:00Z',

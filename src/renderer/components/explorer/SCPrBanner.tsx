@@ -1,7 +1,8 @@
 import type { GitFileStatus, GitStatusResult, GitHubPrStatus } from '../../../preload/index'
 import type { BranchStatus } from '../../store/sessions'
-import type { NavigationTarget } from '../../utils/fileNavigation'
 import { prStateBadgeClass } from '../../utils/explorerHelpers'
+import { humanizeError } from '../../utils/knownErrors'
+import { useErrorStore } from '../../store/errors'
 
 interface SCPrBannerProps {
   prStatus: GitHubPrStatus
@@ -14,7 +15,6 @@ interface SCPrBannerProps {
   onSyncWithMain: () => void
   gitOpError: { operation: string; message: string } | null
   onDismissError: () => void
-  onFileSelect?: (target: NavigationTarget) => void
 }
 
 export function SCPrBanner({
@@ -28,8 +28,8 @@ export function SCPrBanner({
   onSyncWithMain,
   gitOpError,
   onDismissError,
-  onFileSelect,
 }: SCPrBannerProps) {
+  const { showErrorDetail } = useErrorStore()
   return (
     <>
       {/* PR Status banner */}
@@ -76,20 +76,26 @@ export function SCPrBanner({
       {/* Git operation error banner */}
       {gitOpError && (
         <div className="px-3 py-2 border-b border-red-500/30 bg-red-500/10 flex items-center gap-2">
-          <div
-            className="flex-1 text-xs text-red-400 cursor-pointer hover:text-red-300 truncate"
+          <button
+            className="flex-1 text-xs text-red-400 cursor-pointer hover:text-red-300 truncate text-left"
             title="Click to view full error"
-            onClick={async () => {
-              const errorContent = `${gitOpError.operation} failed\n${'='.repeat(40)}\n\n${gitOpError.message}`
-              const errorPath = '/tmp/broomy-git-error.txt'
-              await window.fs.writeFile(errorPath, errorContent)
-              onFileSelect?.({ filePath: errorPath, openInDiffMode: false })
+            onClick={() => {
+              const displayMessage = humanizeError(gitOpError.message)
+              showErrorDetail({
+                id: 'git-op-error',
+                message: gitOpError.message,
+                displayMessage: `${gitOpError.operation} failed: ${displayMessage}`,
+                detail: gitOpError.message,
+                scope: 'app',
+                dismissed: false,
+                timestamp: Date.now(),
+              })
             }}
           >
             {gitOpError.operation} failed: {gitOpError.message.length > 80
               ? `${gitOpError.message.slice(0, 80)  }...`
               : gitOpError.message}
-          </div>
+          </button>
           <button
             onClick={onDismissError}
             className="text-red-400 hover:text-red-300 text-xs shrink-0 px-1"

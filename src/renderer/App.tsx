@@ -19,6 +19,8 @@ import { useAgentStore } from './store/agents'
 import { useRepoStore } from './store/repos'
 import { useProfileStore } from './store/profiles'
 import { PanelProvider, PANEL_IDS } from './panels'
+import ErrorBoundary from './components/ErrorBoundary'
+import ErrorDetailModal from './components/ErrorDetailModal'
 import { useGitPolling } from './hooks/useGitPolling'
 import { useFileNavigation } from './hooks/useFileNavigation'
 import { useSessionLifecycle } from './hooks/useSessionLifecycle'
@@ -58,6 +60,18 @@ function UnsavedChangesDialog({ onCancel, onDiscard, onSave }: {
   )
 }
 
+function GitMissingBanner() {
+  const { gitAvailable } = useRepoStore()
+  if (gitAvailable !== false) return null
+  return (
+    <div className="bg-red-900/30 border-b border-red-500/30 px-4 py-2 text-xs text-red-300 flex items-center gap-2">
+      <span className="font-medium">git is not installed.</span>
+      <span className="text-red-400">Broomy requires git to manage repositories.</span>
+      <button onClick={() => window.shell.openExternal('https://git-scm.com/downloads')} className="text-accent hover:underline ml-1">Download git</button>
+    </div>
+  )
+}
+
 function AppContent() {
   const {
     sessions,
@@ -91,7 +105,7 @@ function AppContent() {
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
-  const { repos, loadRepos, checkGhAvailability } = useRepoStore()
+  const { repos, loadRepos, checkGhAvailability, checkGitAvailability } = useRepoStore()
   const { currentProfileId, profiles, loadProfiles, switchProfile } = useProfileStore()
   const { showHelpModal, setShowHelpModal, showShortcutsModal, setShowShortcutsModal, markStepComplete } = useHelpMenu(currentProfileId)
   const currentProfile = profiles.find((p) => p.id === currentProfileId)
@@ -151,7 +165,7 @@ function AppContent() {
     loadSessions,
     loadAgents,
     loadRepos,
-    checkGhAvailability,
+    checkGhAvailability, checkGitAvailability,
     switchProfile,
     markSessionRead,
     refreshAllBranches,
@@ -223,6 +237,7 @@ function AppContent() {
 
   return (
     <>
+      <GitMissingBanner />
       <Layout
         panels={panelsMap}
         panelVisibility={activeSession?.panelVisibility ?? {}}
@@ -284,12 +299,15 @@ function App() {
   }, [])
 
   return (
-    <PanelProvider
-      toolbarPanels={toolbarPanels}
-      onToolbarPanelsChange={setToolbarPanels}
-    >
-      <AppContent />
-    </PanelProvider>
+    <ErrorBoundary>
+      <PanelProvider
+        toolbarPanels={toolbarPanels}
+        onToolbarPanelsChange={setToolbarPanels}
+      >
+        <AppContent />
+        <ErrorDetailModal />
+      </PanelProvider>
+    </ErrorBoundary>
   )
 }
 

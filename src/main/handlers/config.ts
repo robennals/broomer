@@ -257,12 +257,18 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     if (ctx.isE2ETest) {
       return isWindows
         ? '@echo off\r\necho init script for E2E'
-        : '#!/bin/bash\necho "init script for E2E"'
+        : '#!/bin/sh\necho "init script for E2E"'
     }
 
     try {
       const initScriptsDir = profileId ? getProfileInitScriptsDir(profileId) : join(CONFIG_DIR, 'init-scripts')
-      const scriptPath = join(initScriptsDir, `${repoId}.sh`)
+      // Check for platform-appropriate extension first, then fall back
+      const platformExt = isWindows ? '.bat' : '.sh'
+      const fallbackExt = isWindows ? '.sh' : '.bat'
+      let scriptPath = join(initScriptsDir, `${repoId}${platformExt}`)
+      if (!existsSync(scriptPath)) {
+        scriptPath = join(initScriptsDir, `${repoId}${fallbackExt}`)
+      }
       if (!existsSync(scriptPath)) return null
       return readFileSync(scriptPath, 'utf-8')
     } catch {
@@ -280,7 +286,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
       if (!existsSync(initScriptsDir)) {
         mkdirSync(initScriptsDir, { recursive: true })
       }
-      const scriptPath = join(initScriptsDir, `${repoId}.sh`)
+      const scriptPath = join(initScriptsDir, isWindows ? `${repoId}.bat` : `${repoId}.sh`)
       writeFileSync(scriptPath, script, 'utf-8')
       makeExecutable(scriptPath)
       return { success: true }

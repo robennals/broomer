@@ -10,7 +10,7 @@ afterEach(() => {
 })
 
 beforeEach(() => {
-  useErrorStore.setState({ errors: [], hasUnread: false })
+  useErrorStore.setState({ errors: [], hasUnread: false, detailError: null })
   vi.clearAllMocks()
 })
 
@@ -34,11 +34,12 @@ describe('ErrorIndicator', () => {
     expect(screen.getByTitle('3 errors')).toBeTruthy()
   })
 
-  it('expands error list on click', () => {
-    useErrorStore.getState().addError('Visible error message')
+  it('expands error list on click and shows displayMessage', () => {
+    useErrorStore.getState().addError('ENOENT: no such file or directory')
     render(<ErrorIndicator />)
     fireEvent.click(screen.getByTitle('1 error'))
-    expect(screen.getByText('Visible error message')).toBeTruthy()
+    // Should show humanized displayMessage
+    expect(screen.getByText('File or directory not found.')).toBeTruthy()
     expect(screen.getByText('Errors (1)')).toBeTruthy()
   })
 
@@ -59,12 +60,13 @@ describe('ErrorIndicator', () => {
     expect(useErrorStore.getState().hasUnread).toBe(false)
   })
 
-  it('dismisses individual errors via store', () => {
+  it('dismissError marks error as dismissed', () => {
     useErrorStore.getState().addError('Error to keep')
     useErrorStore.getState().addError('Error to dismiss')
     const errorId = useErrorStore.getState().errors[0].id // newest first
     useErrorStore.getState().dismissError(errorId)
-    expect(useErrorStore.getState().errors).toHaveLength(1)
-    expect(useErrorStore.getState().errors[0].message).toBe('Error to keep')
+    // Error is still in list but marked dismissed
+    expect(useErrorStore.getState().errors).toHaveLength(2)
+    expect(useErrorStore.getState().errors.find(e => e.id === errorId)!.dismissed).toBe(true)
   })
 })

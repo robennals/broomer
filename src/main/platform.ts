@@ -12,11 +12,13 @@ export const isMac = process.platform === 'darwin'
 
 export function getDefaultShell(): string {
   if (isWindows) return process.env.ComSpec || 'powershell.exe'
-  return process.env.SHELL || '/bin/zsh'
+  return process.env.SHELL || '/bin/sh'
 }
 
 export function getExecShell(): string | undefined {
-  return isWindows ? undefined : '/bin/bash'
+  if (isWindows) return undefined // Node defaults to cmd.exe
+  // Prefer the user's configured shell, fall back to POSIX sh
+  return process.env.SHELL || '/bin/sh'
 }
 
 export function normalizePath(p: string): string {

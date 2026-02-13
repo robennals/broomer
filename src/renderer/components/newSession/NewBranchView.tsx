@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAgentStore } from '../../store/agents'
 import type { ManagedRepo, GitHubIssue } from '../../../preload/index'
 import { issueToBranchName } from '../../utils/slugify'
+import { DialogErrorBanner } from '../ErrorBanner'
 
 export function NewBranchView({
   repo,
@@ -130,7 +131,7 @@ export function NewBranchView({
         </div>
 
         {error && (
-          <div className="text-xs text-red-400 bg-red-400/10 rounded px-3 py-2 whitespace-pre-wrap">{error}</div>
+          <DialogErrorBanner error={error} onDismiss={() => setError(null)} />
         )}
       </div>
 

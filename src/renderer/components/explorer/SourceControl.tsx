@@ -79,7 +79,6 @@ export function SourceControl({
       onSyncWithMain={actions.handleSyncWithMain}
       gitOpError={data.gitOpError}
       onDismissError={() => data.setGitOpError(null)}
-      onFileSelect={onFileSelect}
     />
   )
 

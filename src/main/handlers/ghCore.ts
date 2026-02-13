@@ -12,7 +12,17 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   ipcMain.handle('agent:isInstalled', (_event, command: string) => {
     if (ctx.isE2ETest) return true
     try {
-      execSync(isWindows ? `where ${command}` : `which ${command}`, { stdio: 'ignore' })
+      execSync(isWindows ? `where ${command}` : `command -v ${command}`, { stdio: 'ignore', shell: isWindows ? undefined : '/bin/sh' })
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  ipcMain.handle('git:isInstalled', () => {
+    if (ctx.isE2ETest) return true
+    try {
+      execSync('git --version', { stdio: 'ignore' })
       return true
     } catch {
       return false

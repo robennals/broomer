@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAgentStore } from '../../store/agents'
 import { useRepoStore } from '../../store/repos'
+import { DialogErrorBanner } from '../ErrorBanner'
 
 export function CloneView({
   onBack,
@@ -172,7 +173,7 @@ export function CloneView({
         </div>
 
         {error && (
-          <div className="text-xs text-red-400 bg-red-400/10 rounded px-3 py-2 whitespace-pre-wrap">{error}</div>
+          <DialogErrorBanner error={error} onDismiss={() => setError(null)} />
         )}
       </div>
 

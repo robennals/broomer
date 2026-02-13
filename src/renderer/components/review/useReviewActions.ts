@@ -45,7 +45,7 @@ export function useReviewActions(
       if (!exists) return false
 
       const content = await window.fs.readFile(gitignorePath)
-      const lines = content.split('\n').map((l: string) => l.trim())
+      const lines = content.split(/\r?\n/).map((l: string) => l.trim())
       return lines.some((line: string) => line === '.broomy' || line === '.broomy/' || line === '/.broomy' || line === '/.broomy/')
     } catch {
       return false

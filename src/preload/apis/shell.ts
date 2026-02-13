@@ -13,6 +13,7 @@ export type AppApi = {
   isDev: () => Promise<boolean>
   homedir: () => Promise<string>
   platform: () => Promise<string>
+  tmpdir: () => Promise<string>
 }
 
 export const shellApi: ShellApi = {
@@ -28,4 +29,5 @@ export const appApi: AppApi = {
   isDev: () => ipcRenderer.invoke('app:isDev'),
   homedir: () => ipcRenderer.invoke('app:homedir'),
   platform: () => ipcRenderer.invoke('app:platform'),
+  tmpdir: () => ipcRenderer.invoke('app:tmpdir'),
 }

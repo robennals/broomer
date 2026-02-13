@@ -136,6 +136,14 @@ export function HomeView({
           </div>
         )}
 
+        {ghAvailable === false && repos.length > 0 && (
+          <div className="text-xs text-text-secondary bg-bg-tertiary rounded px-3 py-2 border border-border">
+            <span className="font-medium text-yellow-400">GitHub CLI (gh) not found.</span>{' '}
+            Issues and PR review features are hidden. Install it to enable them:{' '}
+            <button onClick={() => window.shell.openExternal('https://cli.github.com')} className="text-accent hover:underline">cli.github.com</button>
+          </div>
+        )}
+
         {repos.length === 0 && (
           <div className="text-center text-text-secondary text-sm py-4">
             No managed repositories yet.

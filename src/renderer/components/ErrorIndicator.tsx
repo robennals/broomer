@@ -4,13 +4,14 @@
  * Renders a small icon button that pulses when there are unread errors. Clicking toggles
  * a dropdown listing all accumulated errors with timestamps, individual dismiss buttons,
  * and a clear-all action. The component reads from and writes to the error Zustand store,
- * marking errors as read when the dropdown is opened.
+ * marking errors as read when the dropdown is opened. Clicking an error message opens
+ * the detail modal.
  */
 import { useState } from 'react'
 import { useErrorStore } from '../store/errors'
 
 export default function ErrorIndicator() {
-  const { errors, hasUnread, dismissError, clearAll, markRead } = useErrorStore()
+  const { errors, hasUnread, dismissError, clearAll, markRead, showErrorDetail } = useErrorStore()
   const [isOpen, setIsOpen] = useState(false)
 
   const handleToggle = () => {
@@ -89,12 +90,18 @@ export default function ErrorIndicator() {
               {errors.map((error) => (
                 <div
                   key={error.id}
-                  className="p-3 hover:bg-bg-tertiary group"
+                  className={`p-3 hover:bg-bg-tertiary group ${error.dismissed ? 'opacity-50' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm text-text-primary break-words flex-1">
-                      {error.message}
-                    </p>
+                    <button
+                      onClick={() => {
+                        showErrorDetail(error)
+                        setIsOpen(false)
+                      }}
+                      className="text-sm text-text-primary break-words flex-1 text-left hover:text-accent transition-colors"
+                    >
+                      {error.displayMessage}
+                    </button>
                     <button
                       onClick={() => dismissError(error.id)}
                       className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-text-primary transition-opacity p-1 -m-1"

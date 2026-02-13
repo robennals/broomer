@@ -26,6 +26,7 @@ interface RepoStore {
   repos: ManagedRepo[]
   defaultCloneDir: string
   ghAvailable: boolean | null
+  gitAvailable: boolean | null
   profileId?: string
 
   loadRepos: (profileId?: string) => Promise<void>
@@ -34,12 +35,14 @@ interface RepoStore {
   removeRepo: (id: string) => void
   setDefaultCloneDir: (dir: string) => Promise<void>
   checkGhAvailability: () => Promise<void>
+  checkGitAvailability: () => Promise<void>
 }
 
 export const useRepoStore = create<RepoStore>((set, get) => ({
   repos: [],
   defaultCloneDir: '',
   ghAvailable: null,
+  gitAvailable: null,
 
   loadRepos: async (profileId?: string) => {
     if (profileId !== undefined) {
@@ -104,6 +107,15 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       set({ ghAvailable: available })
     } catch {
       set({ ghAvailable: false })
+    }
+  },
+
+  checkGitAvailability: async () => {
+    try {
+      const available = await window.git.isInstalled()
+      set({ gitAvailable: available })
+    } catch {
+      set({ gitAvailable: false })
     }
   },
 }))

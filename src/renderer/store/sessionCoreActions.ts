@@ -1,4 +1,5 @@
 import { basename } from 'path-browserify'
+import { useErrorStore } from './errors'
 import { PANEL_IDS, DEFAULT_TOOLBAR_PANELS } from '../panels/types'
 import type { Session, PanelVisibility, TerminalTabsState } from './sessions'
 import {
@@ -177,6 +178,7 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
         })
       } catch (err) {
         console.warn('[sessions] Failed to load sessions config:', err)
+        useErrorStore.getState().addError('Failed to load session config')
         set({ sessions: [], activeSessionId: null, isLoading: false })
       }
     },

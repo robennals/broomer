@@ -163,26 +163,42 @@ export function useSourceControlActions({
   const handleRevertFile = async (filePath: string) => {
     if (!directory) return
     if (!window.confirm(`Revert changes to "${filePath}"? This cannot be undone.`)) return
-    await window.git.checkoutFile(directory, filePath)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.checkoutFile(directory, filePath)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Revert', message: String(err) })
+    }
   }
 
   const handleStage = async (filePath: string) => {
     if (!directory) return
-    await window.git.stage(directory, filePath)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.stage(directory, filePath)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Stage', message: String(err) })
+    }
   }
 
   const handleStageAll = async () => {
     if (!directory) return
-    await window.git.stageAll(directory)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.stageAll(directory)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Stage', message: String(err) })
+    }
   }
 
   const handleUnstage = async (filePath: string) => {
     if (!directory) return
-    await window.git.unstage(directory, filePath)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.unstage(directory, filePath)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Unstage', message: String(err) })
+    }
   }
 
   const handleCommit = async () => {
@@ -257,7 +273,11 @@ export function useSourceControlActions({
         setReplyText(prev => ({ ...prev, [commentId]: '' }))
         const comments = await window.gh.prComments(directory, prStatus.number)
         setPrComments(comments)
+      } else {
+        setGitOpError({ operation: 'Reply', message: result.error || 'Failed to post reply' })
       }
+    } catch (err) {
+      setGitOpError({ operation: 'Reply', message: String(err) })
     } finally {
       setIsSubmittingReply(null)
     }

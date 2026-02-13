@@ -26,7 +26,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
         const stats = statSync(filePath)
         if (stats.size > MAX_FILE_SIZE) return []
         const content = readFileSync(filePath, 'utf-8')
-        const lines = content.split('\n')
+        const lines = content.split(/\r?\n/)
         const matches: { line: number; text: string }[] = []
         for (let i = 0; i < lines.length && matches.length < MAX_CONTENT_MATCHES_PER_FILE; i++) {
           if (lines[i].toLowerCase().includes(lowerQuery)) {
