@@ -118,7 +118,25 @@ function createGitActions(
     }
   }
 
-  return { handleSync, handleSyncWithMain, handlePushToMain, handleCreatePr }
+  const handlePushNewBranch = async (branchName: string) => {
+    if (!directory) return
+    setIsSyncing(true)
+    setGitOpError(null)
+    try {
+      const result = await window.git.pushNewBranch(directory, branchName)
+      if (!result.success) {
+        setGitOpError({ operation: 'Push branch', message: result.error || 'Failed to push branch' })
+        return
+      }
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Push branch', message: String(err) })
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  return { handleSync, handleSyncWithMain, handlePushToMain, handleCreatePr, handlePushNewBranch }
 }
 
 export function useSourceControlActions({

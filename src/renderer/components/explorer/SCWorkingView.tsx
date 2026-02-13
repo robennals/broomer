@@ -22,6 +22,7 @@ interface SCWorkingViewProps {
   isSyncing: boolean
   onCommit: () => void
   onSync: () => void
+  onPushNewBranch: (branchName: string) => void
   onStage: (filePath: string) => void
   onStageAll: () => void
   onUnstage: (filePath: string) => void
@@ -29,16 +30,82 @@ interface SCWorkingViewProps {
   onOpenReview?: () => void
 }
 
+function SyncStatusContent({
+  ahead,
+  behind,
+  branchStatus,
+  hasNoTracking,
+  onOpenReview,
+}: {
+  ahead: number
+  behind: number
+  branchStatus?: BranchStatus
+  hasNoTracking: boolean
+  onOpenReview?: () => void
+}) {
+  const hasRemoteChanges = ahead > 0 || behind > 0
+
+  if (hasRemoteChanges) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        {ahead > 0 && (
+          <div className="flex items-center gap-2 text-sm text-green-400">
+            <span className="text-lg">&uarr;</span>
+            <span className="font-medium">{ahead} commit{ahead !== 1 ? 's' : ''} to push</span>
+          </div>
+        )}
+        {behind > 0 && (
+          <div className="flex items-center gap-2 text-sm text-blue-400">
+            <span className="text-lg">&darr;</span>
+            <span className="font-medium">{behind} commit{behind !== 1 ? 's' : ''} to pull</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (branchStatus && branchStatus !== 'in-progress') {
+    return (
+      <>
+        <BranchStatusCard status={branchStatus} />
+        {(branchStatus === 'open' || branchStatus === 'pushed') && onOpenReview && (
+          <button
+            onClick={onOpenReview}
+            className="px-4 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+          >
+            Get AI Review
+          </button>
+        )}
+      </>
+    )
+  }
+
+  if (hasNoTracking) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div className="text-sm text-text-secondary">Up to date</div>
+        <div className="text-xs text-yellow-400">No remote tracking branch</div>
+      </div>
+    )
+  }
+
+  return <div className="text-sm text-text-secondary">Up to date</div>
+}
+
 function SyncView({
   syncStatus,
   branchStatus,
   isSyncing,
   onSync,
+  onPushNewBranch,
   onOpenReview,
-}: Pick<SCWorkingViewProps, 'syncStatus' | 'branchStatus' | 'isSyncing' | 'onSync' | 'onOpenReview'>) {
+}: Pick<SCWorkingViewProps, 'syncStatus' | 'branchStatus' | 'isSyncing' | 'onSync' | 'onPushNewBranch' | 'onOpenReview'>) {
   const ahead = syncStatus?.ahead ?? 0
   const behind = syncStatus?.behind ?? 0
   const hasRemoteChanges = ahead > 0 || behind > 0
+  const currentBranch = syncStatus?.current ?? ''
+  const isOnMainBranch = currentBranch === 'main' || currentBranch === 'master'
+  const hasNoTracking = !syncStatus?.tracking && !isOnMainBranch && !!currentBranch
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4">
@@ -48,36 +115,13 @@ function SyncView({
         </div>
       )}
 
-      {hasRemoteChanges ? (
-        <div className="flex flex-col items-center gap-2">
-          {ahead > 0 && (
-            <div className="flex items-center gap-2 text-sm text-green-400">
-              <span className="text-lg">&uarr;</span>
-              <span className="font-medium">{ahead} commit{ahead !== 1 ? 's' : ''} to push</span>
-            </div>
-          )}
-          {behind > 0 && (
-            <div className="flex items-center gap-2 text-sm text-blue-400">
-              <span className="text-lg">&darr;</span>
-              <span className="font-medium">{behind} commit{behind !== 1 ? 's' : ''} to pull</span>
-            </div>
-          )}
-        </div>
-      ) : branchStatus && branchStatus !== 'in-progress' ? (
-        <>
-          <BranchStatusCard status={branchStatus} />
-          {(branchStatus === 'open' || branchStatus === 'pushed') && onOpenReview && (
-            <button
-              onClick={onOpenReview}
-              className="px-4 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
-            >
-              Get AI Review
-            </button>
-          )}
-        </>
-      ) : (
-        <div className="text-sm text-text-secondary">Up to date</div>
-      )}
+      <SyncStatusContent
+        ahead={ahead}
+        behind={behind}
+        branchStatus={branchStatus}
+        hasNoTracking={hasNoTracking}
+        onOpenReview={onOpenReview}
+      />
 
       {syncStatus?.tracking && branchStatus !== 'merged' && (
         <button
@@ -90,6 +134,16 @@ function SyncView({
           }`}
         >
           {isSyncing ? 'Syncing...' : 'Sync Changes'}
+        </button>
+      )}
+
+      {hasNoTracking && (
+        <button
+          onClick={() => onPushNewBranch(currentBranch)}
+          disabled={isSyncing}
+          className="px-4 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 disabled:opacity-50"
+        >
+          {isSyncing ? 'Pushing...' : 'Push Branch to Remote'}
         </button>
       )}
     </div>
@@ -113,6 +167,7 @@ export function SCWorkingView({
   isSyncing,
   onCommit,
   onSync,
+  onPushNewBranch,
   onStage,
   onStageAll,
   onUnstage,
@@ -126,6 +181,7 @@ export function SCWorkingView({
         branchStatus={branchStatus}
         isSyncing={isSyncing}
         onSync={onSync}
+        onPushNewBranch={onPushNewBranch}
         onOpenReview={onOpenReview}
       />
     )

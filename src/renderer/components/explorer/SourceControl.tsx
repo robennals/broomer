@@ -162,6 +162,7 @@ export function SourceControl({
         isSyncing={data.isSyncing}
         onCommit={actions.handleCommit}
         onSync={actions.handleSync}
+        onPushNewBranch={actions.handlePushNewBranch}
         onStage={actions.handleStage}
         onStageAll={actions.handleStageAll}
         onUnstage={actions.handleUnstage}
