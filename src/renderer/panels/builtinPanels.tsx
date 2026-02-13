@@ -1,3 +1,11 @@
+/**
+ * Built-in panel definitions for all seven standard Broomy panels.
+ *
+ * Each panel is defined with its ID, display name, inline SVG icon, layout
+ * position(s), default visibility, toolbar inclusion, and resize constraints.
+ * The BUILTIN_PANELS array is registered into the global panel registry at
+ * application startup. Icon components are also exported for reuse elsewhere.
+ */
 import { PanelDefinition, PANEL_IDS } from './types'
 
 // Icon components
@@ -92,7 +100,7 @@ export const BUILTIN_PANELS: PanelDefinition[] = [
     icon: <ReviewIcon />,
     position: 'center-left',
     defaultVisible: false,
-    defaultInToolbar: false,
+    defaultInToolbar: true,
     resizable: true,
     minSize: 250,
     maxSize: 600,

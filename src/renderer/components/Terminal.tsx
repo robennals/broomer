@@ -1,3 +1,14 @@
+/**
+ * xterm.js terminal wrapper that manages a PTY connection and detects agent activity.
+ *
+ * Creates an xterm.js instance, connects it to a backend PTY via IPC, and handles
+ * auto-fit on resize, scroll-following with manual disengage, and viewport desync
+ * repair. For agent terminals, it runs time-based activity detection: output within
+ * a suppression window after user input is ignored, otherwise new data sets status
+ * to "working" and 1 second of silence sets it to "idle". Transitions from working
+ * to idle (after at least 3 seconds) mark the session as unread. Also detects plan
+ * file paths in agent output via a rolling buffer regex match.
+ */
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -5,8 +16,9 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { useErrorStore } from '../store/errors'
 import { useSessionStore } from '../store/sessions'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
-import { stripAnsi } from '../utils/stripAnsi'
 import { evaluateActivity } from '../utils/terminalActivityDetector'
+import { useTerminalKeyboard } from '../hooks/useTerminalKeyboard'
+import { usePlanDetection } from '../hooks/usePlanDetection'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
@@ -40,6 +52,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const cwdRef = useRef(cwd)
   cwdRef.current = cwd
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const [restartKey, setRestartKey] = useState(0)
   const isFollowingRef = useRef(true)
   const { addError } = useErrorStore()
   const addErrorRef = useRef(addError)
@@ -56,15 +69,14 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   const setPlanFileRef = useRef(setPlanFile)
   setPlanFileRef.current = setPlanFile
 
-  // Rolling buffer for plan file detection (agent terminals only)
-  const planDetectionBufferRef = useRef('')
-  const lastDetectedPlanRef = useRef<string | null>(null)
-
   const sessionIdRef = useRef(sessionId)
   sessionIdRef.current = sessionId
   const onUserInputRef = useRef(onUserInput)
   onUserInputRef.current = onUserInput
   const hasNotifiedUserInputRef = useRef(false)
+
+  const handleKeyEvent = useTerminalKeyboard(ptyIdRef)
+  const processPlanDetection = usePlanDetection(sessionIdRef, setPlanFileRef)
 
   const pendingUpdateRef = useRef<{ status?: 'working' | 'idle' | 'error'; lastMessage?: string } | null>(null)
 
@@ -89,6 +101,29 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       updateTimeoutRef.current = setTimeout(flushUpdate, 300)
     }
   }, [flushUpdate])
+
+  const handleContextMenu = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault()
+    const hasSelection = terminalRef.current?.hasSelection() ?? false
+    const items = [
+      { id: 'copy', label: 'Copy', enabled: hasSelection },
+      { id: 'paste', label: 'Paste' },
+      ...(isAgentTerminal ? [
+        { id: 'sep', label: '', type: 'separator' as const },
+        { id: 'restart-agent', label: 'Restart Agent' },
+      ] : []),
+    ]
+    const result = await window.menu.popup(items)
+    if (result === 'copy' && terminalRef.current) {
+      const text = terminalRef.current.getSelection()
+      if (text) navigator.clipboard.writeText(text)
+    } else if (result === 'paste' && ptyIdRef.current) {
+      const text = await navigator.clipboard.readText()
+      if (text) window.pty.write(ptyIdRef.current, text)
+    } else if (result === 'restart-agent') {
+      setRestartKey((k) => k + 1)
+    }
+  }, [isAgentTerminal])
 
   const handleScrollToBottom = useCallback(() => {
     terminalRef.current?.scrollToBottom()
@@ -166,31 +201,67 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
 
     // Track whether we just wrote data — helps diagnose desyncs
     let lastWriteTime = 0
+    // Pending rAF id for scroll-to-bottom retry (lets us cancel on user scroll)
+    let pendingScrollRAF = 0
+
+    // Cache the xterm viewport element for cheap desync checks
+    const viewportEl = containerRef.current!.querySelector('.xterm-viewport') as HTMLElement | null
+
+    // Force xterm to recalculate the viewport scroll area.
+    // Works around an xterm.js issue where the DOM scroll area height gets
+    // out of sync with the buffer, making scrollback unreachable.
+    // We toggle terminal.resize() by ±1 row to force syncScrollArea() —
+    // the intermediate state is never painted because the browser batches
+    // DOM updates within a single JS turn.
+    const forceViewportSync = () => {
+      const { cols, rows } = terminal
+      if (cols > 0 && rows > 1) {
+        terminal.resize(cols, rows + 1)
+        terminal.resize(cols, rows)
+      }
+    }
+
+    // Check if the viewport scroll area is desynced from the buffer.
+    // Returns true if buffer has scrollback content but the DOM viewport
+    // isn't scrollable (scrollHeight ≈ clientHeight).
+    const isViewportDesynced = () => {
+      if (!viewportEl) return false
+      return terminal.buffer.active.baseY > 0 &&
+        viewportEl.scrollHeight <= viewportEl.clientHeight + 1
+    }
+
+    // Check if we can scroll further in the given direction but DOM won't move.
+    // direction: 1 = down, -1 = up
+    const isScrollStuck = (direction: 1 | -1): boolean => {
+      if (!viewportEl) return false
+      const buffer = terminal.buffer.active
+      if (direction === 1) {
+        // Trying to scroll down: stuck if not at buffer bottom but DOM is at scroll bottom
+        const notAtBufferBottom = buffer.viewportY < buffer.baseY
+        const domAtBottom = viewportEl.scrollTop >= viewportEl.scrollHeight - viewportEl.clientHeight - 1
+        return notAtBufferBottom && domAtBottom
+      } else {
+        // Trying to scroll up: stuck if not at buffer top but DOM is at scroll top
+        const notAtBufferTop = buffer.viewportY > 0
+        const domAtTop = viewportEl.scrollTop <= 1
+        return notAtBufferTop && domAtTop
+      }
+    }
+
+    // Debounce timer for proactive viewport sync checks after data writes
+    let syncCheckTimeout: ReturnType<typeof setTimeout> | null = null
+    // Track consecutive stuck scroll attempts to avoid over-syncing
+    let stuckScrollCount = 0
+    let lastStuckSyncTime = 0
 
     // Update the scroll button visibility on render frames.
-    // Also log diagnostic info when a desync is detected while following.
+    // NOTE: We intentionally do NOT auto-correct scroll position here.
+    // The write callback handles scrolling, and onRender just updates the UI.
+    // Previous auto-correct here caused a race: onRender fired before the
+    // wheel handler's rAF could disengage following mode, so scrollToBottom()
+    // fought user scroll attempts.
     terminal.onRender(() => {
-      const buffer = terminal.buffer.active
       const atBottom = isAtBottom()
-      const wasFollowing = isFollowingRef.current
-
-      // Diagnostic: if we're supposed to be following but we're not at the bottom,
-      // something caused a desync. Log it so we can identify the root cause.
-      if (wasFollowing && !atBottom && buffer.baseY > 0) {
-        const gap = buffer.baseY - buffer.viewportY
-        const timeSinceWrite = Date.now() - lastWriteTime
-        console.warn('[Terminal scroll desync]', {
-          viewportY: buffer.viewportY,
-          baseY: buffer.baseY,
-          gap,
-          timeSinceWrite,
-          rows: terminal.rows,
-          cols: terminal.cols,
-        })
-        // Auto-correct: if we're following, snap back to bottom
-        terminal.scrollToBottom()
-      }
-
       setShowScrollButton(!atBottom && terminal.buffer.active.baseY > 0)
     })
 
@@ -198,7 +269,59 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     // After a user scroll, check if they ended up at the bottom:
     //   - At bottom → re-engage following (auto-scroll on new output)
     //   - Not at bottom → disengage following (user is reading scrollback)
-    const updateFollowingFromScroll = () => {
+    const updateFollowingFromScroll = (e: Event) => {
+      // Immediately disengage following on upward scroll gestures.
+      // This MUST happen synchronously — if we wait for rAF, the onRender
+      // handler would see isFollowing=true and fight the user's scroll.
+      if (e instanceof WheelEvent && e.deltaY < 0) {
+        isFollowingRef.current = false
+        // Cancel any pending scroll-to-bottom retry from a recent write
+        if (pendingScrollRAF) {
+          cancelAnimationFrame(pendingScrollRAF)
+          pendingScrollRAF = 0
+        }
+      }
+
+      // Unified stuck scroll detection for both directions.
+      // We no longer preemptively call forceViewportSync() on upward scroll
+      // because that resize can itself cause position jumps. Instead, we
+      // only force sync if the scroll actually doesn't move when it should.
+      if (e instanceof WheelEvent) {
+        const direction = e.deltaY > 0 ? 1 : -1
+        const scrollTopBefore = viewportEl?.scrollTop ?? 0
+        const viewportYBefore = terminal.buffer.active.viewportY
+
+        // Use rAF to check after the scroll event has been processed
+        requestAnimationFrame(() => {
+          const scrollTopAfter = viewportEl?.scrollTop ?? 0
+          const viewportYAfter = terminal.buffer.active.viewportY
+          const scrollMoved = Math.abs(scrollTopAfter - scrollTopBefore) > 0.5
+          const bufferMoved = viewportYAfter !== viewportYBefore
+
+          // If neither DOM scroll nor buffer position moved, but we should
+          // be able to scroll further, we're stuck and need to resync
+          if (!scrollMoved && !bufferMoved && isScrollStuck(direction as 1 | -1)) {
+            const now = Date.now()
+            stuckScrollCount++
+
+            // Force sync after 2 stuck attempts, with 500ms cooldown
+            if (stuckScrollCount >= 2 && now - lastStuckSyncTime > 500) {
+              forceViewportSync()
+              lastStuckSyncTime = now
+              stuckScrollCount = 0
+            }
+          } else if (scrollMoved || bufferMoved) {
+            // Reset stuck counter on successful scroll
+            stuckScrollCount = 0
+          }
+
+          const atBottom = isAtBottom()
+          isFollowingRef.current = atBottom
+          setShowScrollButton(!atBottom && terminal.buffer.active.baseY > 0)
+        })
+        return // Already scheduled rAF above
+      }
+
       requestAnimationFrame(() => {
         const atBottom = isAtBottom()
         isFollowingRef.current = atBottom
@@ -206,9 +329,21 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       })
     }
     const handleKeyScroll = (e: KeyboardEvent) => {
+      if (e.key === 'PageUp' || (e.shiftKey && e.key === 'ArrowUp')) {
+        // Immediately disengage following on upward keyboard scroll
+        isFollowingRef.current = false
+        if (pendingScrollRAF) {
+          cancelAnimationFrame(pendingScrollRAF)
+          pendingScrollRAF = 0
+        }
+      }
       if (e.key === 'PageUp' || e.key === 'PageDown' ||
           (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) {
-        updateFollowingFromScroll()
+        requestAnimationFrame(() => {
+          const atBottom = isAtBottom()
+          isFollowingRef.current = atBottom
+          setShowScrollButton(!atBottom && terminal.buffer.active.baseY > 0)
+        })
       }
     }
     containerRef.current.addEventListener('wheel', updateFollowingFromScroll, { passive: true })
@@ -224,45 +359,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     })
 
     // Keyboard shortcuts
-    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'Tab') {
-        return false
-      }
-      if (e.shiftKey && e.key === 'Enter') {
-        if (e.type === 'keydown' && ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x1b[13;2u')
-        }
-        return false
-      }
-      if (e.metaKey && e.key === 'ArrowLeft') {
-        if (e.type === 'keydown' && ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x01')
-        }
-        return false
-      }
-      if (e.metaKey && e.key === 'ArrowRight') {
-        if (e.type === 'keydown' && ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x05')
-        }
-        return false
-      }
-      if (e.type !== 'keydown') return true
-      if (e.metaKey && e.key === 'Backspace') {
-        if (ptyIdRef.current) {
-          window.pty.write(ptyIdRef.current, '\x15')
-        }
-        return false
-      }
-      if (e.metaKey || e.ctrlKey) {
-        if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
-          window.dispatchEvent(new CustomEvent('app:toggle-panel', {
-            detail: { key: e.key }
-          }))
-          return false
-        }
-      }
-      return true
-    })
+    terminal.attachCustomKeyEventHandler(handleKeyEvent)
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -298,21 +395,36 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
             // scroll to bottom if we're in following mode.
             if (isFollowingRef.current) {
               terminal.scrollToBottom()
+              // If the DOM scroll area height is stale (hasn't been updated
+              // by xterm's render yet), scrollToBottom() gets clamped by the
+              // browser. Retry after the next frame when the DOM is current.
+              if (!isAtBottom()) {
+                pendingScrollRAF = requestAnimationFrame(() => {
+                  pendingScrollRAF = 0
+                  if (isFollowingRef.current) {
+                    terminal.scrollToBottom()
+                  }
+                })
+              }
             }
           })
 
+          // Proactive viewport desync check — debounced so we don't
+          // do the DOM read on every single data chunk.
+          // Check both for scrollHeight desync AND for stuck scroll positions
+          // (buffer has content we can't reach via DOM scrolling).
+          if (!syncCheckTimeout) {
+            syncCheckTimeout = setTimeout(() => {
+              syncCheckTimeout = null
+              if (isViewportDesynced() || isScrollStuck(1) || isScrollStuck(-1)) {
+                forceViewportSync()
+              }
+            }, 500)
+          }
+
           // Plan file detection for agent terminals
-          if (isAgent && sessionIdRef.current) {
-            const stripped = stripAnsi(data)
-            planDetectionBufferRef.current += stripped
-            if (planDetectionBufferRef.current.length > 1000) {
-              planDetectionBufferRef.current = planDetectionBufferRef.current.slice(-1000)
-            }
-            const planMatch = planDetectionBufferRef.current.match(/\/[^\s)]+\.claude-personal\/plans\/[^\s)]+\.md/)
-            if (planMatch && planMatch[0] !== lastDetectedPlanRef.current) {
-              lastDetectedPlanRef.current = planMatch[0]
-              setPlanFileRef.current(sessionIdRef.current, planMatch[0])
-            }
+          if (isAgent) {
+            processPlanDetection(data)
           }
 
           // Activity detection for agent terminals
@@ -374,6 +486,16 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       try { fitAddon.fit() } catch { /* ignore */ }
       if (isFollowingRef.current) {
         terminal.scrollToBottom()
+        // fit() changes terminal dimensions which can leave the DOM stale.
+        // Retry scroll after the next frame.
+        if (!isAtBottom()) {
+          pendingScrollRAF = requestAnimationFrame(() => {
+            pendingScrollRAF = 0
+            if (isFollowingRef.current) {
+              terminal.scrollToBottom()
+            }
+          })
+        }
       }
       if (ptyResizeTimeout) clearTimeout(ptyResizeTimeout)
       ptyResizeTimeout = setTimeout(() => {
@@ -391,6 +513,8 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
       scrollContainer.removeEventListener('keydown', handleKeyScroll)
       resizeObserver.disconnect()
       if (ptyResizeTimeout) clearTimeout(ptyResizeTimeout)
+      if (syncCheckTimeout) clearTimeout(syncCheckTimeout)
+      if (pendingScrollRAF) cancelAnimationFrame(pendingScrollRAF)
       cleanupRef.current?.()
       if (ptyIdRef.current) {
         window.pty.kill(ptyIdRef.current)
@@ -406,14 +530,15 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
         terminalBufferRegistry.unregister(sessionId)
       }
     }
-  }, [sessionId]) // Only recreate terminal when session identity changes
+  }, [sessionId, restartKey]) // Recreate terminal when session identity changes or on restart
 
-  // Fit when terminal becomes visible (e.g., tab switch)
+  // Fit and focus when terminal becomes visible (e.g., tab switch or session selection)
   useEffect(() => {
     lastInteractionRef.current = Date.now()
-    if (isActive && fitAddonRef.current) {
+    if (isActive) {
       requestAnimationFrame(() => {
         try { fitAddonRef.current?.fit() } catch { /* ignore */ }
+        terminalRef.current?.focus()
       })
     }
   }, [isActive])
@@ -440,7 +565,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
   }
 
   return (
-    <div className="h-full w-full p-2 relative">
+    <div className="h-full w-full p-2 relative" onContextMenu={handleContextMenu}>
       <div ref={containerRef} className="h-full w-full" />
       {showScrollButton && (
         <button
