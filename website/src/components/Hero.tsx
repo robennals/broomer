@@ -40,6 +40,9 @@ export default function Hero() {
           </a>
           <DownloadButton />
         </div>
+        <div className="mx-auto mt-5 max-w-2xl rounded-lg border border-border-hover bg-bg-elevated px-4 py-3 text-sm text-text-body">
+          Public Preview - stable enough for daily use, but you may run into issues
+        </div>
 
         {/* Badges row */}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
