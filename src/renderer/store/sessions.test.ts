@@ -458,6 +458,62 @@ describe('useSessionStore', () => {
     })
   })
 
+  describe('setPlanFile', () => {
+    it('sets planFilePath on a session', () => {
+      const s1 = createTestSession({ id: 's1' })
+      useSessionStore.setState({ sessions: [s1], isLoading: false })
+
+      useSessionStore.getState().setPlanFile('s1', '/plan.md')
+      expect(useSessionStore.getState().sessions[0].planFilePath).toBe('/plan.md')
+    })
+
+    it('clears planFilePath when set to null', () => {
+      const s1 = { ...createTestSession({ id: 's1' }), planFilePath: '/plan.md' }
+      useSessionStore.setState({ sessions: [s1], isLoading: false })
+
+      useSessionStore.getState().setPlanFile('s1', null)
+      expect(useSessionStore.getState().sessions[0].planFilePath).toBeNull()
+    })
+
+    it('does not affect other sessions', () => {
+      const s1 = createTestSession({ id: 's1' })
+      const s2 = createTestSession({ id: 's2' })
+      useSessionStore.setState({ sessions: [s1, s2], isLoading: false })
+
+      useSessionStore.getState().setPlanFile('s1', '/plan.md')
+      expect(useSessionStore.getState().sessions[1].planFilePath).toBeNull()
+    })
+  })
+
+  describe('setAgentPtyId', () => {
+    it('sets agentPtyId on a session', () => {
+      const s1 = createTestSession({ id: 's1' })
+      useSessionStore.setState({ sessions: [s1], isLoading: false })
+
+      useSessionStore.getState().setAgentPtyId('s1', 'pty-123')
+      expect(useSessionStore.getState().sessions[0].agentPtyId).toBe('pty-123')
+    })
+
+    it('does not affect other sessions', () => {
+      const s1 = createTestSession({ id: 's1' })
+      const s2 = createTestSession({ id: 's2' })
+      useSessionStore.setState({ sessions: [s1, s2], isLoading: false })
+
+      useSessionStore.getState().setAgentPtyId('s1', 'pty-123')
+      expect(useSessionStore.getState().sessions[1].agentPtyId).toBeUndefined()
+    })
+  })
+
+  describe('markHasHadCommits', () => {
+    it('sets hasHadCommits to true', () => {
+      const s1 = createTestSession({ id: 's1' })
+      useSessionStore.setState({ sessions: [s1], isLoading: false })
+
+      useSessionStore.getState().markHasHadCommits('s1')
+      expect(useSessionStore.getState().sessions[0].hasHadCommits).toBe(true)
+    })
+  })
+
   describe('agent monitoring', () => {
     it('updateAgentMonitor updates status', () => {
       const s1 = createTestSession({ id: 's1' })

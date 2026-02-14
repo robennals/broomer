@@ -170,6 +170,39 @@ describe('gitBasic handlers', () => {
       expect(result.ahead).toBe(1)
     })
 
+    it('handles file with only working dir change', async () => {
+      mockGitInstance.status.mockResolvedValue({
+        files: [
+          { path: 'changed.ts', index: ' ', working_dir: 'M' },
+        ],
+        ahead: 0,
+        behind: 0,
+        tracking: null,
+        current: 'main',
+      })
+      const handlers = setupHandlers()
+      const result = await handlers['git:status'](null, '/repo')
+      expect(result.files).toHaveLength(1)
+      expect(result.files[0].staged).toBe(false)
+    })
+
+    it('handles file with no index and no working dir change gracefully', async () => {
+      mockGitInstance.status.mockResolvedValue({
+        files: [
+          { path: 'weird.ts', index: ' ', working_dir: ' ' },
+        ],
+        ahead: 0,
+        behind: 0,
+        tracking: null,
+        current: 'main',
+      })
+      const handlers = setupHandlers()
+      const result = await handlers['git:status'](null, '/repo')
+      expect(result.files).toHaveLength(1)
+      expect(result.files[0].status).toBe('modified')
+      expect(result.files[0].staged).toBe(false)
+    })
+
     it('returns empty status on error', async () => {
       mockGitInstance.status.mockRejectedValue(new Error('fail'))
       const handlers = setupHandlers()
@@ -232,6 +265,13 @@ describe('gitBasic handlers', () => {
       expect(result).toEqual({ success: true })
       expect(mockGitInstance.reset).toHaveBeenCalledWith(['HEAD', '--', 'file.ts'])
     })
+
+    it('returns error on unstage failure', async () => {
+      mockGitInstance.reset.mockRejectedValue(new Error('unstage error'))
+      const handlers = setupHandlers()
+      const result = await handlers['git:unstage'](null, '/repo', 'file.ts')
+      expect(result).toEqual({ success: false, error: expect.stringContaining('unstage error') })
+    })
   })
 
   describe('git:checkoutFile', () => {
@@ -247,6 +287,13 @@ describe('gitBasic handlers', () => {
       const result = await handlers['git:checkoutFile'](null, '/repo', 'file.ts')
       expect(result).toEqual({ success: true })
       expect(mockGitInstance.checkout).toHaveBeenCalledWith(['--', 'file.ts'])
+    })
+
+    it('returns error on checkout failure', async () => {
+      mockGitInstance.checkout.mockRejectedValue(new Error('checkout error'))
+      const handlers = setupHandlers()
+      const result = await handlers['git:checkoutFile'](null, '/repo', 'file.ts')
+      expect(result).toEqual({ success: false, error: expect.stringContaining('checkout error') })
     })
   })
 
@@ -316,6 +363,13 @@ describe('gitBasic handlers', () => {
       const handlers = setupHandlers()
       expect(await handlers['git:pull'](null, '/repo')).toEqual({ success: true })
     })
+
+    it('returns error on pull failure', async () => {
+      mockGitInstance.pull.mockRejectedValue(new Error('pull error'))
+      const handlers = setupHandlers()
+      const result = await handlers['git:pull'](null, '/repo')
+      expect(result).toEqual({ success: false, error: expect.stringContaining('pull error') })
+    })
   })
 
   describe('git:diff', () => {
@@ -323,6 +377,14 @@ describe('gitBasic handlers', () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
       const result = await handlers['git:diff'](null, '/repo')
       expect(result).toContain('diff --git')
+    })
+
+    it('returns screenshot mode diff with detailed content', async () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = await handlers['git:diff'](null, '/repo')
+      expect(result).toContain('diff --git a/src/middleware/auth.ts')
+      expect(result).toContain('TokenService')
+      expect(result).toContain('SessionStore')
     })
 
     it('returns diff for specific file', async () => {
@@ -353,6 +415,13 @@ describe('gitBasic handlers', () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
       const result = await handlers['git:show'](null, '/repo', 'file.ts')
       expect(result).toContain('function main')
+    })
+
+    it('returns screenshot mode content with detailed code', async () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = await handlers['git:show'](null, '/repo', 'file.ts')
+      expect(result).toContain('authenticate')
+      expect(result).toContain('jwt.verify')
     })
 
     it('shows file at ref in normal mode', async () => {

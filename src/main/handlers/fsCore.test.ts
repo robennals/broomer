@@ -96,6 +96,35 @@ describe('fsCore handlers', () => {
       expect(result.some((e: { name: string }) => e.name === 'app.ts')).toBe(true)
     })
 
+    it('returns screenshot-mode mock data for /middleware path', () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = handlers['fs:readDir'](null, '/project/src/middleware')
+      expect(result.some((e: { name: string }) => e.name === 'auth.ts')).toBe(true)
+      expect(result.some((e: { name: string }) => e.name === 'cors.ts')).toBe(true)
+    })
+
+    it('returns screenshot-mode mock data for /services path', () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = handlers['fs:readDir'](null, '/project/src/services')
+      expect(result.some((e: { name: string }) => e.name === 'session.ts')).toBe(true)
+      expect(result.some((e: { name: string }) => e.name === 'token.ts')).toBe(true)
+    })
+
+    it('returns screenshot-mode mock data for /routes path', () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = handlers['fs:readDir'](null, '/project/src/routes')
+      expect(result.some((e: { name: string }) => e.name === 'auth.ts')).toBe(true)
+      expect(result.some((e: { name: string }) => e.name === 'health.ts')).toBe(true)
+    })
+
+    it('returns screenshot-mode mock data for root path', () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = handlers['fs:readDir'](null, '/project')
+      expect(result.some((e: { name: string }) => e.name === 'src')).toBe(true)
+      expect(result.some((e: { name: string }) => e.name === 'package.json')).toBe(true)
+      expect(result.some((e: { name: string }) => e.name === 'Dockerfile')).toBe(true)
+    })
+
     it('reads directory entries sorted with dirs first in normal mode', () => {
       vi.mocked(readdirSync).mockReturnValue([
         { name: 'b.ts', isDirectory: () => false },
@@ -129,6 +158,28 @@ describe('fsCore handlers', () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
       const result = handlers['fs:readFile'](null, '/some/file.ts')
       expect(result).toContain('Mock file content')
+    })
+
+    it('returns screenshot auth.ts content in screenshot mode', () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = handlers['fs:readFile'](null, '/project/src/middleware/auth.ts')
+      expect(result).toContain('authenticate')
+      expect(result).toContain('TokenService')
+    })
+
+    it('returns screenshot review.json content in screenshot mode', () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = handlers['fs:readFile'](null, '/tmp/broomy-review-abc123/review.json')
+      const parsed = JSON.parse(result)
+      expect(parsed.version).toBe(1)
+      expect(parsed.prNumber).toBe(47)
+      expect(parsed.changePatterns).toHaveLength(3)
+    })
+
+    it('returns empty comments array for screenshot comments.json', () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
+      const result = handlers['fs:readFile'](null, '/tmp/broomy-review-abc123/comments.json')
+      expect(result).toBe('[]')
     })
 
     it('reads file content in normal mode', () => {
@@ -242,6 +293,14 @@ describe('fsCore handlers', () => {
       const result = handlers['fs:mkdir'](null, '/existing/dir')
       expect(result).toEqual({ success: false, error: 'Directory already exists' })
     })
+
+    it('returns error when mkdir throws', () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(mkdirSync).mockImplementation(() => { throw new Error('mkdir error') })
+      const handlers = setupHandlers()
+      const result = handlers['fs:mkdir'](null, '/bad/dir')
+      expect(result).toEqual({ success: false, error: expect.stringContaining('mkdir error') })
+    })
   })
 
   describe('fs:rm', () => {
@@ -296,6 +355,14 @@ describe('fsCore handlers', () => {
       const result = handlers['fs:createFile'](null, '/existing.ts')
       expect(result).toEqual({ success: false, error: 'File already exists' })
     })
+
+    it('returns error when createFile throws', () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(writeFileSync).mockImplementation(() => { throw new Error('create error') })
+      const handlers = setupHandlers()
+      const result = handlers['fs:createFile'](null, '/bad/file.ts')
+      expect(result).toEqual({ success: false, error: expect.stringContaining('create error') })
+    })
   })
 
   describe('fs:readFileBase64', () => {
@@ -320,6 +387,13 @@ describe('fsCore handlers', () => {
       vi.mocked(existsSync).mockReturnValue(false)
       const handlers = setupHandlers()
       expect(() => handlers['fs:readFileBase64'](null, '/missing.png')).toThrow('File not found')
+    })
+
+    it('throws when path is a directory', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(statSync).mockReturnValue({ isDirectory: () => true, size: 0 } as never)
+      const handlers = setupHandlers()
+      expect(() => handlers['fs:readFileBase64'](null, '/some/dir')).toThrow('Cannot read directory as file')
     })
 
     it('throws when file is too large', () => {
@@ -364,6 +438,84 @@ describe('fsCore handlers', () => {
       const event = { sender: {} }
       handlers['fs:watch'](event, 'watch-1', '/dir')
       expect(oldWatcher.close).toHaveBeenCalled()
+    })
+
+    it('sends fs:change events through watcher callback', () => {
+      let watchCallback: (eventType: string, filename: string | null) => void = () => {}
+      const mockWatcher = { on: vi.fn(), close: vi.fn() }
+      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+        watchCallback = cb as (eventType: string, filename: string | null) => void
+        return mockWatcher as never
+      })
+      const mockSend = vi.fn()
+      const mockWindow = { isDestroyed: () => false, webContents: { send: mockSend } }
+      vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWindow as never)
+
+      const ctx = createMockCtx()
+      const handlers = setupHandlers(ctx)
+      const event = { sender: {} }
+      handlers['fs:watch'](event, 'watch-1', '/dir')
+
+      // Normal file change should send event
+      watchCallback('change', 'src/file.ts')
+      expect(mockSend).toHaveBeenCalledWith('fs:change:watch-1', { eventType: 'change', filename: 'src/file.ts' })
+    })
+
+    it('ignores .git file changes in watcher callback', () => {
+      let watchCallback: (eventType: string, filename: string | null) => void = () => {}
+      const mockWatcher = { on: vi.fn(), close: vi.fn() }
+      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+        watchCallback = cb as (eventType: string, filename: string | null) => void
+        return mockWatcher as never
+      })
+      const mockSend = vi.fn()
+      const mockWindow = { isDestroyed: () => false, webContents: { send: mockSend } }
+      vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWindow as never)
+
+      const ctx = createMockCtx()
+      const handlers = setupHandlers(ctx)
+      const event = { sender: {} }
+      handlers['fs:watch'](event, 'watch-1', '/dir')
+
+      watchCallback('change', '.git/HEAD')
+      expect(mockSend).not.toHaveBeenCalled()
+    })
+
+    it('uses mainWindow when owner window is not available', () => {
+      let watchCallback: (eventType: string, filename: string | null) => void = () => {}
+      const mockWatcher = { on: vi.fn(), close: vi.fn() }
+      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+        watchCallback = cb as (eventType: string, filename: string | null) => void
+        return mockWatcher as never
+      })
+      vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(null)
+
+      const mockSend = vi.fn()
+      const mainWindow = { isDestroyed: () => false, webContents: { send: mockSend } }
+      const ctx = createMockCtx({ mainWindow: mainWindow as never })
+      const handlers = setupHandlers(ctx)
+      const event = { sender: {} }
+      handlers['fs:watch'](event, 'watch-1', '/dir')
+
+      watchCallback('change', 'file.ts')
+      expect(mockSend).toHaveBeenCalledWith('fs:change:watch-1', { eventType: 'change', filename: 'file.ts' })
+    })
+
+    it('handles watcher error by removing from map', () => {
+      const mockWatcher = { on: vi.fn(), close: vi.fn() }
+      vi.mocked(watch).mockReturnValue(mockWatcher as never)
+      vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(null)
+
+      const ctx = createMockCtx()
+      const handlers = setupHandlers(ctx)
+      const event = { sender: {} }
+      handlers['fs:watch'](event, 'watch-1', '/dir')
+      expect(ctx.fileWatchers.has('watch-1')).toBe(true)
+
+      // Trigger the error handler
+      const errorHandler = mockWatcher.on.mock.calls.find((c: [string, Function]) => c[0] === 'error')?.[1]
+      errorHandler(new Error('watcher error'))
+      expect(ctx.fileWatchers.has('watch-1')).toBe(false)
     })
 
     it('returns error when watch throws', () => {
