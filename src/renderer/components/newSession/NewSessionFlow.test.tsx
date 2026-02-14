@@ -94,4 +94,45 @@ describe('NewSessionDialog', () => {
     fireEvent.click(screen.getByText('Existing'))
     expect(screen.getByText('Existing Branches')).toBeTruthy()
   })
+
+  it('navigates to repo settings view', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: true, updateRepo: vi.fn(), removeRepo: vi.fn() })
+    vi.mocked(window.repos.getInitScript).mockResolvedValue('')
+    render(<NewSessionDialog onComplete={vi.fn()} onCancel={vi.fn()} />)
+    // Click settings button (the last button-like element for the repo)
+    const settingsBtn = document.querySelector('[title="Repository settings"]') || (() => {
+      // Find repo card and get the settings button (cog icon)
+      const repoCard = screen.getByText('My Project').closest('.group')!
+      return repoCard.querySelectorAll('button')[repoCard.querySelectorAll('button').length - 1]
+    })()
+    fireEvent.click(settingsBtn as HTMLElement)
+    expect(screen.getByText('Repository Settings')).toBeTruthy()
+  })
+
+  it('navigates to issues view', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: true })
+    vi.mocked(window.gh.issues).mockReturnValue(new Promise(() => {}))
+    render(<NewSessionDialog onComplete={vi.fn()} onCancel={vi.fn()} />)
+    fireEvent.click(screen.getByText('Issues'))
+    expect(screen.getByText(/Issues/)).toBeTruthy()
+  })
+
+  it('navigates to review PRs view', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: true })
+    vi.mocked(window.gh.prsToReview).mockReturnValue(new Promise(() => {}))
+    render(<NewSessionDialog onComplete={vi.fn()} onCancel={vi.fn()} />)
+    fireEvent.click(screen.getByText('Review'))
+    expect(screen.getByText('PRs to Review')).toBeTruthy()
+  })
+
+  it('navigates to agent picker via Open button', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: true })
+    render(<NewSessionDialog onComplete={vi.fn()} onCancel={vi.fn()} />)
+    fireEvent.click(screen.getByText('Open'))
+    expect(screen.getByText('Select Agent')).toBeTruthy()
+  })
 })

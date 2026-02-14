@@ -69,6 +69,58 @@ describe('AddExistingRepoView', () => {
     })
   })
 
+  it('validates and adds repo after Browse returns a valid folder', async () => {
+    vi.mocked(window.dialog.openFolder).mockResolvedValue('/repos/my-project')
+    vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
+    vi.mocked(window.git.worktreeList).mockResolvedValue([
+      { path: '/repos/my-project/main', branch: 'main' },
+      { path: '/repos/my-project/feature-x', branch: 'feature-x' },
+    ])
+    vi.mocked(window.git.remoteUrl).mockResolvedValue('https://github.com/user/my-project.git')
+    vi.mocked(window.git.defaultBranch).mockResolvedValue('main')
+    vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(true)
+    vi.mocked(window.config.load).mockResolvedValue({ repos: [{ id: 'new-repo', rootDir: '/repos/my-project', name: 'my-project' }] })
+    const addRepo = vi.fn()
+    useRepoStore.setState({ addRepo })
+
+    const onComplete = vi.fn()
+    render(<AddExistingRepoView onBack={vi.fn()} onComplete={onComplete} />)
+
+    // Click Browse which triggers validation
+    fireEvent.click(screen.getByText('Browse'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Found 2 worktrees/)).toBeTruthy()
+    })
+
+    // The Add Repository button should now be enabled
+    const addBtn = screen.getByText('Add Repository')
+    expect(addBtn.hasAttribute('disabled')).toBe(false)
+
+    fireEvent.click(addBtn)
+
+    await waitFor(() => {
+      expect(addRepo).toHaveBeenCalled()
+      expect(onComplete).toHaveBeenCalled()
+    })
+  })
+
+  it('shows validation error for non-worktree git repo', async () => {
+    vi.mocked(window.dialog.openFolder).mockResolvedValue('/repos/single-repo')
+    // main/ is not a git repo
+    vi.mocked(window.git.isGitRepo).mockImplementation(async (path: string) => {
+      if (path.endsWith('/main')) return false
+      return true // the folder itself is a git repo
+    })
+
+    render(<AddExistingRepoView onBack={vi.fn()} onComplete={vi.fn()} />)
+    fireEvent.click(screen.getByText('Browse'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/single git repo/)).toBeTruthy()
+    })
+  })
+
   it('updates rootDir input when typing', () => {
     const onBack = vi.fn()
     const onComplete = vi.fn()

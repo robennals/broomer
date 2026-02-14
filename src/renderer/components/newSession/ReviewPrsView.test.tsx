@@ -113,6 +113,53 @@ describe('ReviewPrsView', () => {
     })
   })
 
+  it('shows error when Start Review fails', async () => {
+    vi.mocked(window.gh.prsToReview).mockResolvedValue([
+      { number: 101, title: 'Add tests', author: 'alice', headRefName: 'add-tests', baseRefName: 'main', url: '', labels: [] },
+    ])
+    vi.mocked(window.git.worktreeList).mockResolvedValue([])
+    vi.mocked(window.git.fetchBranch).mockResolvedValue({ success: false })
+    vi.mocked(window.git.fetchPrHead).mockResolvedValue({ success: false, error: 'Permission denied' })
+
+    render(
+      <ReviewPrsView repo={mockRepo} onBack={vi.fn()} onComplete={vi.fn()} />
+    )
+    await waitFor(() => {
+      expect(screen.getByText('Add tests')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByText('Add tests'))
+    await waitFor(() => {
+      expect(screen.getByText('Start Review')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByText('Start Review'))
+    await waitFor(() => {
+      expect(screen.getByText(/Permission denied/)).toBeTruthy()
+    })
+  })
+
+  it('uses back arrow to go back from PR detail', async () => {
+    vi.mocked(window.gh.prsToReview).mockResolvedValue([
+      { number: 101, title: 'Add tests', author: 'alice', headRefName: 'add-tests', baseRefName: 'main', url: '', labels: [] },
+    ])
+    render(
+      <ReviewPrsView repo={mockRepo} onBack={vi.fn()} onComplete={vi.fn()} />
+    )
+    await waitFor(() => {
+      expect(screen.getByText('Add tests')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByText('Add tests'))
+    await waitFor(() => {
+      expect(screen.getByText('Review PR')).toBeTruthy()
+    })
+    // Click the back arrow (first button in the header)
+    const header = screen.getByText('Review PR').closest('.border-b')!
+    const backArrow = header.querySelector('button')!
+    fireEvent.click(backArrow)
+    await waitFor(() => {
+      expect(screen.getByText('PRs to Review')).toBeTruthy()
+    })
+  })
+
   it('can go back from PR detail to PR list', async () => {
     vi.mocked(window.gh.prsToReview).mockResolvedValue([
       { number: 101, title: 'Add tests', author: 'alice', headRefName: 'add-tests', baseRefName: 'main', url: '', labels: [] },

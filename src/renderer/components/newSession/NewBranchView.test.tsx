@@ -146,6 +146,45 @@ describe('NewBranchView', () => {
     })
   })
 
+  it('shows error when pushNewBranch fails', async () => {
+    vi.mocked(window.git.pull).mockResolvedValue({ success: true })
+    vi.mocked(window.git.worktreeAdd).mockResolvedValue({ success: true })
+    vi.mocked(window.git.pushNewBranch).mockResolvedValue({ success: false, error: 'Permission denied' })
+
+    render(
+      <NewBranchView repo={mockRepo} onBack={vi.fn()} onComplete={vi.fn()} />
+    )
+
+    const input = screen.getByPlaceholderText('feature/my-feature')
+    fireEvent.change(input, { target: { value: 'feature/auth' } })
+    fireEvent.click(screen.getByText('Create Branch'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Permission denied|Failed to push/)).toBeTruthy()
+    })
+  })
+
+  it('executes init script when non-empty', async () => {
+    vi.mocked(window.git.pull).mockResolvedValue({ success: true })
+    vi.mocked(window.git.worktreeAdd).mockResolvedValue({ success: true })
+    vi.mocked(window.git.pushNewBranch).mockResolvedValue({ success: true })
+    vi.mocked(window.repos.getInitScript).mockResolvedValue('npm install')
+
+    const onComplete = vi.fn()
+    render(
+      <NewBranchView repo={mockRepo} onBack={vi.fn()} onComplete={onComplete} />
+    )
+
+    const input = screen.getByPlaceholderText('feature/my-feature')
+    fireEvent.change(input, { target: { value: 'feature/auth' } })
+    fireEvent.click(screen.getByText('Create Branch'))
+
+    await waitFor(() => {
+      expect(window.shell.exec).toHaveBeenCalledWith('npm install', '/repos/my-project/feature/auth')
+      expect(onComplete).toHaveBeenCalled()
+    })
+  })
+
   it('lists agents in select dropdown', () => {
     render(
       <NewBranchView repo={mockRepo} onBack={vi.fn()} onComplete={vi.fn()} />

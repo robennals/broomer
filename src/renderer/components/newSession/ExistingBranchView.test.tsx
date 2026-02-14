@@ -137,6 +137,121 @@ describe('ExistingBranchView', () => {
     })
   })
 
+  it('creates worktree when Create Worktree is clicked', async () => {
+    vi.mocked(window.git.worktreeList).mockResolvedValue([
+      { path: '/repos/my-project/main', branch: 'main' },
+    ])
+    vi.mocked(window.git.listBranches).mockResolvedValue([
+      { name: 'origin/fix-bug', isRemote: true },
+    ])
+    vi.mocked(window.git.worktreeAdd).mockResolvedValue({ success: true })
+    vi.mocked(window.repos.getInitScript).mockResolvedValue('')
+
+    const onComplete = vi.fn()
+    render(
+      <ExistingBranchView repo={mockRepo} onBack={vi.fn()} onComplete={onComplete} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('fix-bug')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByText('fix-bug'))
+
+    await waitFor(() => {
+      const elements = screen.getAllByText('Create Worktree')
+      expect(elements.length).toBe(2)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Worktree/ }))
+
+    await waitFor(() => {
+      expect(window.git.worktreeAdd).toHaveBeenCalled()
+      expect(onComplete).toHaveBeenCalledWith(
+        '/repos/my-project/fix-bug',
+        'agent-1',
+        { repoId: 'repo-1', name: 'my-project' }
+      )
+    })
+  })
+
+  it('shows error when worktree creation fails', async () => {
+    vi.mocked(window.git.worktreeList).mockResolvedValue([
+      { path: '/repos/my-project/main', branch: 'main' },
+    ])
+    vi.mocked(window.git.listBranches).mockResolvedValue([
+      { name: 'origin/fix-bug', isRemote: true },
+    ])
+    vi.mocked(window.git.worktreeAdd).mockResolvedValue({ success: false, error: 'Branch exists' })
+
+    render(
+      <ExistingBranchView repo={mockRepo} onBack={vi.fn()} onComplete={vi.fn()} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('fix-bug')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByText('fix-bug'))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Create Worktree').length).toBe(2)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Worktree/ }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Branch exists/)).toBeTruthy()
+    })
+  })
+
+  it('filters branches by search query', async () => {
+    vi.mocked(window.git.worktreeList).mockResolvedValue([
+      { path: '/repos/my-project/main', branch: 'main' },
+    ])
+    vi.mocked(window.git.listBranches).mockResolvedValue([
+      { name: 'feature-auth', isRemote: false },
+      { name: 'fix-bug', isRemote: false },
+    ])
+
+    render(
+      <ExistingBranchView repo={mockRepo} onBack={vi.fn()} onComplete={vi.fn()} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('feature-auth')).toBeTruthy()
+      expect(screen.getByText('fix-bug')).toBeTruthy()
+    })
+
+    const searchInput = screen.getByPlaceholderText('Search branches...')
+    fireEvent.change(searchInput, { target: { value: 'feature' } })
+
+    expect(screen.getByText('feature-auth')).toBeTruthy()
+    expect(screen.queryByText('fix-bug')).toBeNull()
+  })
+
+  it('shows no matches message when search has no results', async () => {
+    vi.mocked(window.git.worktreeList).mockResolvedValue([
+      { path: '/repos/my-project/main', branch: 'main' },
+    ])
+    vi.mocked(window.git.listBranches).mockResolvedValue([
+      { name: 'feature-auth', isRemote: false },
+    ])
+
+    render(
+      <ExistingBranchView repo={mockRepo} onBack={vi.fn()} onComplete={vi.fn()} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('feature-auth')).toBeTruthy()
+    })
+
+    const searchInput = screen.getByPlaceholderText('Search branches...')
+    fireEvent.change(searchInput, { target: { value: 'zzz' } })
+
+    expect(screen.getByText(/No branches matching "zzz"/)).toBeTruthy()
+  })
+
   it('shows error when branch fetch fails', async () => {
     vi.mocked(window.git.pull).mockRejectedValue(new Error('Network error'))
     vi.mocked(window.git.worktreeList).mockRejectedValue(new Error('Failed to list worktrees'))

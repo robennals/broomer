@@ -165,4 +165,40 @@ describe('HomeView', () => {
     fireEvent.click(screen.getByText('Open'))
     expect(props.onOpenMain).toHaveBeenCalledWith(repo)
   })
+
+  it('calls onIssues when Issues button is clicked', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: true })
+    const props = makeProps()
+    render(<HomeView {...props} />)
+    fireEvent.click(screen.getByText('Issues'))
+    expect(props.onIssues).toHaveBeenCalledWith(repo)
+  })
+
+  it('calls onReviewPrs when Review button is clicked', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: true })
+    const props = makeProps()
+    render(<HomeView {...props} />)
+    fireEvent.click(screen.getByText('Review'))
+    expect(props.onReviewPrs).toHaveBeenCalledWith(repo)
+  })
+
+  it('calls onRepoSettings when settings button is clicked', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: true })
+    const props = makeProps()
+    const { container } = render(<HomeView {...props} />)
+    const settingsBtn = container.querySelector('[title="Repository settings"]') || container.querySelectorAll('button')[container.querySelectorAll('button').length - 1]
+    fireEvent.click(settingsBtn)
+    expect(props.onRepoSettings).toHaveBeenCalledWith(repo)
+  })
+
+  it('opens cli.github.com when link is clicked', () => {
+    const repo = { id: 'repo-1', name: 'My Project', remoteUrl: '', rootDir: '/repos/my-project', defaultBranch: 'main' }
+    useRepoStore.setState({ repos: [repo], ghAvailable: false })
+    render(<HomeView {...makeProps()} />)
+    fireEvent.click(screen.getByText('cli.github.com'))
+    expect(window.shell.openExternal).toHaveBeenCalledWith('https://cli.github.com')
+  })
 })

@@ -105,6 +105,35 @@ describe('CloneView', () => {
     })
   })
 
+  it('updates location when Browse returns a folder', async () => {
+    vi.mocked(window.dialog.openFolder).mockResolvedValue('/new/location')
+    render(<CloneView onBack={vi.fn()} onComplete={vi.fn()} />)
+    fireEvent.click(screen.getByText('Browse'))
+    await waitFor(() => {
+      const inputs = document.querySelectorAll('input')
+      // Second input is the location input
+      const locationInput = Array.from(inputs).find(i => (i as HTMLInputElement).value === '/new/location')
+      expect(locationInput).toBeTruthy()
+    })
+  })
+
+  it('allows typing in location input', () => {
+    render(<CloneView onBack={vi.fn()} onComplete={vi.fn()} />)
+    // Location input - find by current value which is the default clone dir
+    const inputs = document.querySelectorAll('input')
+    // Location is the second input
+    fireEvent.change(inputs[1], { target: { value: '/custom/path' } })
+    expect((inputs[1] as HTMLInputElement).value).toBe('/custom/path')
+  })
+
+  it('allows typing in init script textarea', () => {
+    render(<CloneView onBack={vi.fn()} onComplete={vi.fn()} />)
+    fireEvent.click(screen.getByText('Init Script'))
+    const textarea = screen.getByPlaceholderText(/Runs in each new worktree/)
+    fireEvent.change(textarea, { target: { value: 'npm install' } })
+    expect((textarea as HTMLTextAreaElement).value).toBe('npm install')
+  })
+
   it('shows error when clone fails', async () => {
     vi.mocked(window.git.clone).mockResolvedValue({ success: false, error: 'Auth failed' })
 

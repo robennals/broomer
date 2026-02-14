@@ -143,6 +143,37 @@ describe('RepoSettingsView', () => {
     expect(removeRepo).not.toHaveBeenCalled()
   })
 
+  it('handles getInitScript error gracefully', async () => {
+    vi.mocked(window.repos.getInitScript).mockRejectedValue(new Error('not found'))
+    render(<RepoSettingsView repo={mockRepo} onBack={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.getByText('Init Script')).toBeTruthy()
+    })
+    // Should render without error
+  })
+
+  it('allows typing in init script textarea', async () => {
+    render(<RepoSettingsView repo={mockRepo} onBack={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.getByText('Init Script')).toBeTruthy()
+    })
+    const textareas = document.querySelectorAll('textarea')
+    // First textarea is init script
+    fireEvent.change(textareas[0], { target: { value: 'npm install' } })
+    expect((textareas[0] as HTMLTextAreaElement).value).toBe('npm install')
+  })
+
+  it('allows typing in review instructions textarea', async () => {
+    render(<RepoSettingsView repo={mockRepo} onBack={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.getByText('Review Instructions')).toBeTruthy()
+    })
+    const textareas = document.querySelectorAll('textarea')
+    // Second textarea is review instructions
+    fireEvent.change(textareas[1], { target: { value: 'Check for bugs' } })
+    expect((textareas[1] as HTMLTextAreaElement).value).toBe('Check for bugs')
+  })
+
   it('shows init script textarea', async () => {
     render(<RepoSettingsView repo={mockRepo} onBack={vi.fn()} />)
     await waitFor(() => {
