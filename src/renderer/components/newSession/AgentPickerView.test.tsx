@@ -78,9 +78,11 @@ describe('AgentPickerView', () => {
         onComplete={onComplete}
       />
     )
-    // Wait for install check to finish
+    // Wait for install check to finish and state to update
     await waitFor(() => {
       expect(window.agents.isInstalled).toHaveBeenCalled()
+      // Ensure no "not installed" badges are shown (state has updated)
+      expect(screen.queryAllByText('not installed')).toHaveLength(0)
     })
     fireEvent.click(screen.getByText('Claude'))
     expect(onComplete).toHaveBeenCalledWith('/repos/my-project', 'agent-1', undefined)

@@ -143,9 +143,12 @@ describe('useHelpMenu', () => {
   })
 
   describe('returned values', () => {
-    it('exposes markStepComplete from tutorial store', () => {
+    it('returns expected keys', () => {
       const { result } = renderHook(() => useHelpMenu('profile-1'))
-      expect(result.current.markStepComplete).toBe(mockMarkStepComplete)
+      expect(result.current).toHaveProperty('showHelpModal')
+      expect(result.current).toHaveProperty('setShowHelpModal')
+      expect(result.current).toHaveProperty('showShortcutsModal')
+      expect(result.current).toHaveProperty('setShowShortcutsModal')
     })
   })
 })

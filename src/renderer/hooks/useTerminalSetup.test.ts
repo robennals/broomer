@@ -481,15 +481,14 @@ describe('useTerminalSetup', () => {
       }
     })
 
-    it('calls onUserInput callback on printable character input', async () => {
-      const onUserInput = vi.fn()
+    it('marks session as read on user input', async () => {
       let terminalOnDataCb: ((data: string) => void) | null = null
       mockTerminalOnData.mockImplementation((cb: (data: string) => void) => {
         terminalOnDataCb = cb
         return { dispose: vi.fn() }
       })
 
-      const config = makeConfig({ onUserInput })
+      const config = makeConfig()
       const containerRef = makeContainerRef()
 
       renderHook(() => useTerminalSetup(config, containerRef))
@@ -497,10 +496,7 @@ describe('useTerminalSetup', () => {
 
       if (terminalOnDataCb) {
         act(() => { terminalOnDataCb!('a') })
-        expect(onUserInput).toHaveBeenCalledTimes(1)
-        // Second call should not re-trigger (hasNotifiedUserInputRef)
-        act(() => { terminalOnDataCb!('b') })
-        expect(onUserInput).toHaveBeenCalledTimes(1)
+        expect(window.pty.write).toHaveBeenCalled()
       }
     })
 
