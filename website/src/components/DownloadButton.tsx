@@ -7,7 +7,7 @@ export function DownloadButtons({ compact }: { compact?: boolean }) {
         href={RELEASE_URL}
         className="rounded-lg bg-text-primary px-4 py-2 text-sm font-semibold text-bg-page transition-transform hover:scale-[1.02]"
       >
-        Download
+        Download for Mac
       </a>
     )
   }
@@ -19,10 +19,10 @@ export function DownloadButtons({ compact }: { compact?: boolean }) {
     >
       <span className="flex items-center gap-2">
         <DownloadIcon />
-        Download
+        Download for Mac
       </span>
       <span className="mt-1 text-xs font-normal text-text-muted">
-        macOS &middot; Linux &middot; Windows
+        Mac only (Windows, Linux coming soon)
       </span>
     </a>
   )
